@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16
+    container_name: deferral_dms_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: deferral_dms
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - deferral_dms_pgdata:/var/lib/postgresql/data
+
+volumes:
+  deferral_dms_pgdata:

@@ -1,0 +1,1 @@
+ALTER TABLE "deferral_approvals" ADD COLUMN "signed_by_name_snapshot" text DEFAULT '' NOT NULL;

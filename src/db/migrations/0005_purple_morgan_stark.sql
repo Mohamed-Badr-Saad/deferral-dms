@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "gm_group" "gm_group";

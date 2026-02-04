@@ -1,0 +1,1 @@
+ALTER TABLE "deferral_approvals" ADD COLUMN "is_active" boolean DEFAULT false NOT NULL;
