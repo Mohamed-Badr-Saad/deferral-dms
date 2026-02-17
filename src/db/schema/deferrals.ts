@@ -8,6 +8,8 @@ export const deferrals = pgTable("deferrals", {
 
   initiatorUserId: uuid("initiator_user_id").notNull(), // references users.id (we’ll add FK later if you want)
   initiatorDepartment: text("initiator_department").notNull(),
+  workOrderNo: text("work_order_no").notNull().default(""),
+  workOrderTitle: text("work_order_title").notNull().default(""),
 
   equipmentTag: text("equipment_tag").notNull().default(""),
   equipmentDescription: text("equipment_description").notNull().default(""),

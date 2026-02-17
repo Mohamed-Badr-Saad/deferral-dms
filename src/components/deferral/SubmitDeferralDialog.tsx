@@ -1,14 +1,33 @@
 "use client";
 
-import { useState } from "react";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useMemo, useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export function SubmitDeferralDialog(props: {
   disabled?: boolean;
-  onSubmit: (payload: { workOrderNo: string; workOrderTitle: string }) => Promise<void>;
+
+  /** If provided, the dialog will NOT ask again. It will submit using these values. */
+  initialWorkOrderNo?: string;
+  initialWorkOrderTitle?: string;
+
+  /** Optional pre-submit validation. Return a list of missing fields to block opening the dialog. */
+  validateBeforeOpen?: () => string[];
+  onValidationFailed?: (missing: string[]) => void;
+
+  onSubmit: (payload: {
+    workOrderNo: string;
+    workOrderTitle: string;
+  }) => Promise<void>;
   triggerLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -17,9 +36,20 @@ export function SubmitDeferralDialog(props: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const presetNo = (props.initialWorkOrderNo ?? "").trim();
+  const presetTitle = (props.initialWorkOrderTitle ?? "").trim();
+
+  const willPromptForWorkOrder = useMemo(() => !presetNo, [presetNo]);
+
   async function handleSubmit() {
     setErr(null);
-    if (!workOrderNo.trim()) {
+
+    const finalNo = (willPromptForWorkOrder ? workOrderNo : presetNo).trim();
+    const finalTitle = (
+      willPromptForWorkOrder ? workOrderTitle : presetTitle
+    ).trim();
+
+    if (!finalNo) {
       setErr("Work Order Number is required.");
       return;
     }
@@ -27,8 +57,8 @@ export function SubmitDeferralDialog(props: {
     setBusy(true);
     try {
       await props.onSubmit({
-        workOrderNo: workOrderNo.trim(),
-        workOrderTitle: workOrderTitle.trim(),
+        workOrderNo: finalNo,
+        workOrderTitle: finalTitle,
       });
       setOpen(false);
       setWorkOrderNo("");
@@ -43,44 +73,73 @@ export function SubmitDeferralDialog(props: {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button disabled={props.disabled}>{props.triggerLabel ?? "Submit"}</Button>
+        <Button
+          disabled={props.disabled || busy}
+          onClick={(e) => {
+            if (!props.validateBeforeOpen) return;
+            const missing = props.validateBeforeOpen() ?? [];
+            if (missing.length > 0) {
+              e.preventDefault();
+              e.stopPropagation();
+              props.onValidationFailed?.(missing);
+            }
+          }}
+        >
+          {props.triggerLabel ?? "Submit"}
+        </Button>
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>Submit Deferral</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="workOrderNo">Work Order Number</Label>
-            <Input
-              id="workOrderNo"
-              value={workOrderNo}
-              onChange={(e) => setWorkOrderNo(e.target.value)}
-              placeholder="e.g. WO-123456"
-            />
+        {willPromptForWorkOrder ? (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Work Order Number</Label>
+              <Input
+                placeholder="e.g. WO-123456"
+                value={workOrderNo}
+                onChange={(e) => setWorkOrderNo(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Work Order Title (optional)</Label>
+              <Input
+                placeholder="Short title for the work order"
+                value={workOrderTitle}
+                onChange={(e) => setWorkOrderTitle(e.target.value)}
+              />
+            </div>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="workOrderTitle">Work Order Title (optional)</Label>
-            <Input
-              id="workOrderTitle"
-              value={workOrderTitle}
-              onChange={(e) => setWorkOrderTitle(e.target.value)}
-              placeholder="Short title for the work order"
-            />
+        ) : (
+          <div className="rounded-xl border p-4 space-y-1">
+            <div className="text-sm font-medium">Work Order Number</div>
+            <div className="text-sm text-muted-foreground">{presetNo}</div>
+            {presetTitle && (
+              <>
+                <div className="text-sm font-medium mt-3">Work Order Title</div>
+                <div className="text-sm text-muted-foreground">
+                  {presetTitle}
+                </div>
+              </>
+            )}
+            <div className="text-xs text-muted-foreground mt-3">
+              Work order details are already saved on this deferral.
+            </div>
           </div>
+        )}
 
-          {err && <div className="text-sm text-destructive">{err}</div>}
+        {err && <div className="text-sm text-destructive mt-3">{err}</div>}
 
-          <div className="text-xs text-muted-foreground">
-            After submission, the deferral enters the approval workflow and becomes read-only for most fields.
-          </div>
-        </div>
-
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
+        <DialogFooter className="mt-6">
+          <Button
+            variant="outline"
+            onClick={() => setOpen(false)}
+            disabled={busy}
+          >
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={busy}>

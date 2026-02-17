@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/src/lib/api";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { STATUS_LABELS, STATUS_COLORS } from "@/src/lib/constants";
+import { Separator } from "@/components/ui/separator";
+import { Search, Plus, ListChecks, History, CheckCircle2 } from "lucide-react";
 
 type Deferral = {
   id: string;
@@ -29,43 +31,50 @@ export default function DeferralsPage() {
   const initialScope: Scope = qsScope === "history" ? "history" : "active";
 
   const [scope, setScope] = useState<Scope>(initialScope);
-  const [items, setItems] = useState<Deferral[]>([]);
+
+  // ✅ keep both datasets so counters are always correct
+  const [activeItems, setActiveItems] = useState<Deferral[]>([]);
+  const [historyItems, setHistoryItems] = useState<Deferral[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [q, setQ] = useState("");
 
-  // Keep tab in sync if user navigates via sidebar link
   useEffect(() => {
     const next: Scope = qsScope === "history" ? "history" : "active";
     setScope(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qsScope]);
 
-  async function load(nextScope: Scope) {
+  const loadAll = useCallback(async () => {
     setLoading(true);
     setErr(null);
     try {
-      const res = await api<{ items: Deferral[] }>(
-        `/api/deferrals?scope=${nextScope}`,
-      );
-      setItems(res.items ?? []);
+      const [a, h] = await Promise.all([
+        api<{ items: Deferral[] }>(`/api/deferrals?scope=active`),
+        api<{ items: Deferral[] }>(`/api/deferrals?scope=history`),
+      ]);
+
+      setActiveItems(a.items ?? []);
+      setHistoryItems(h.items ?? []);
     } catch (e: any) {
       setErr(e.message ?? "Failed to load");
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    load(scope);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope]);
+    loadAll();
+  }, [loadAll]);
+
+  const visibleItems = scope === "history" ? historyItems : activeItems;
 
   const filteredSorted = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const filtered = !needle
-      ? items
-      : items.filter((d) => {
+      ? visibleItems
+      : visibleItems.filter((d) => {
           return (
             d.deferralCode?.toLowerCase().includes(needle) ||
             d.initiatorDepartment?.toLowerCase().includes(needle) ||
@@ -74,30 +83,89 @@ export default function DeferralsPage() {
         });
 
     return [...filtered].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
-  }, [items, q]);
+  }, [visibleItems, q]);
+
+  const stats = useMemo(() => {
+    const drafts = activeItems.filter((x) => x.status === "DRAFT").length;
+    const inApproval = activeItems.filter(
+      (x) => x.status === "IN_APPROVAL",
+    ).length;
+
+    // if you want only COMPLETED (not approved/rejected)
+    const completed = historyItems.filter(
+      (x) => x.status === "COMPLETED",
+    ).length;
+
+    return { drafts, inApproval, completed };
+  }, [activeItems, historyItems]);
 
   function onTabChange(v: string) {
     const next = (v === "history" ? "history" : "active") as Scope;
     setScope(next);
-
-    // Sync URL so Sidebar "History" link and refresh keeps correct tab
     const url = next === "history" ? "/deferrals?scope=history" : "/deferrals";
     window.history.replaceState(null, "", url);
   }
 
   return (
     <div className="space-y-6">
+      {/* Page header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Deferrals</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight">Deferrals</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Create, track, and review deferrals through the workflow.
           </p>
         </div>
 
-        <Button asChild>
-          <Link href="/deferrals/new">New Deferral</Link>
+        <Button asChild className="gap-2">
+          <Link href="/deferrals/new">
+            <Plus className="h-4 w-4" />
+            New Deferral
+          </Link>
         </Button>
+      </div>
+
+      {/* Stats */}
+      <div className="rounded-2xl border bg-card">
+        <div className="p-5">
+          <div className="grid gap-3 md:grid-cols-3">
+            <Card className="rounded-2xl">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-sm text-muted-foreground">
+                  Drafts
+                </CardTitle>
+                <ListChecks className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="text-2xl font-semibold">{stats.drafts}</div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-sm text-muted-foreground">
+                  In approval
+                </CardTitle>
+                <History className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="text-2xl font-semibold">{stats.inApproval}</div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-sm text-muted-foreground">
+                  Completed
+                </CardTitle>
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="text-2xl font-semibold">{stats.completed}</div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
 
       {err && (
@@ -109,15 +177,24 @@ export default function DeferralsPage() {
         </Card>
       )}
 
-      <Card>
+      <Card className="rounded-2xl">
         <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <CardTitle className="text-base">Browse</CardTitle>
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search by code, department, equipment..."
-            className="md:max-w-sm"
-          />
+          <div>
+            <CardTitle className="text-base">Browse</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Search by code, department, or equipment tag.
+            </p>
+          </div>
+
+          <div className="relative md:w-[360px]">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search..."
+              className="pl-9"
+            />
+          </div>
         </CardHeader>
 
         <CardContent>
@@ -127,23 +204,25 @@ export default function DeferralsPage() {
               <TabsTrigger value="history">History</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="active" className="mt-4">
+            <Separator className="my-4" />
+
+            <TabsContent value="active">
               {loading ? (
                 <div className="text-sm text-muted-foreground">Loading...</div>
               ) : filteredSorted.length === 0 ? (
                 <div className="text-sm text-muted-foreground">
-                  No active deferrals. Create one to get started.
+                  No active deferrals.
                 </div>
               ) : (
-                <div className="grid gap-4">
+                <div className="grid gap-3">
                   {filteredSorted.map((d) => (
                     <Link
                       key={d.id}
                       href={`/deferrals/${d.id}`}
                       className="block"
                     >
-                      <Card className="hover:bg-muted/40 transition-colors">
-                        <CardContent className="p-6 flex items-center justify-between gap-4">
+                      <Card className="rounded-2xl hover:bg-muted/40 transition-colors">
+                        <CardContent className="p-5 flex items-center justify-between gap-4">
                           <div className="min-w-0">
                             <div className="flex items-center gap-3">
                               <div className="font-medium truncate">
@@ -155,10 +234,14 @@ export default function DeferralsPage() {
                             </div>
                             <div className="text-sm text-muted-foreground truncate">
                               Department: {d.initiatorDepartment}
+                              {d.equipmentTag ? ` • ${d.equipmentTag}` : ""}
                             </div>
                           </div>
-                          <div className="text-xs text-muted-foreground whitespace-nowrap">
-                            Updated: {new Date(d.updatedAt).toLocaleString()}
+                          <div className="text-xs text-muted-foreground whitespace-nowrap text-right">
+                            Updated
+                            <div className="font-medium text-foreground">
+                              {new Date(d.updatedAt).toLocaleString()}
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -168,7 +251,7 @@ export default function DeferralsPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="history" className="mt-4">
+            <TabsContent value="history">
               {loading ? (
                 <div className="text-sm text-muted-foreground">Loading...</div>
               ) : filteredSorted.length === 0 ? (
@@ -176,15 +259,15 @@ export default function DeferralsPage() {
                   No history deferrals found.
                 </div>
               ) : (
-                <div className="grid gap-4">
+                <div className="grid gap-3">
                   {filteredSorted.map((d) => (
                     <Link
                       key={d.id}
                       href={`/deferrals/${d.id}`}
                       className="block"
                     >
-                      <Card className="hover:bg-muted/40 transition-colors">
-                        <CardContent className="p-6 flex items-center justify-between gap-4">
+                      <Card className="rounded-2xl hover:bg-muted/40 transition-colors">
+                        <CardContent className="p-5 flex items-center justify-between gap-4">
                           <div className="min-w-0">
                             <div className="flex items-center gap-3">
                               <div className="font-medium truncate">
@@ -196,10 +279,14 @@ export default function DeferralsPage() {
                             </div>
                             <div className="text-sm text-muted-foreground truncate">
                               Department: {d.initiatorDepartment}
+                              {d.equipmentTag ? ` • ${d.equipmentTag}` : ""}
                             </div>
                           </div>
-                          <div className="text-xs text-muted-foreground whitespace-nowrap">
-                            Updated: {new Date(d.updatedAt).toLocaleString()}
+                          <div className="text-xs text-muted-foreground whitespace-nowrap text-right">
+                            Updated
+                            <div className="font-medium text-foreground">
+                              {new Date(d.updatedAt).toLocaleString()}
+                            </div>
                           </div>
                         </CardContent>
                       </Card>

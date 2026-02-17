@@ -1,3 +1,4 @@
+// src/app/api/deferrals/[id]/submit/route.ts
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { z } from "zod";
@@ -12,8 +13,9 @@ import {
 import { getBusinessProfile, requireRole } from "@/src/lib/authz";
 import { eq, desc } from "drizzle-orm";
 import { buildApprovalSteps } from "@/src/lib/workflow";
-import { activateFirstStep, notifyUser } from "@/src/lib/approval-progress";
+import { activateFirstStep } from "@/src/lib/approval-progress";
 import { computeRamCell, computeRamConsequence } from "@/src/lib/constants";
+import { canViewDeferral } from "@/src/lib/authz/deferralAccess";
 
 const SubmitSchema = z.object({
   workOrderNo: z.string().min(1),
@@ -31,6 +33,8 @@ export async function POST(req: Request, ctx: Ctx) {
   if (!profile) {
     return NextResponse.json({ message: "Permission denied" }, { status: 401 });
   }
+
+  // ✅ include ADMIN
   requireRole(profile, ["ENGINEER_APPLICANT", "ADMIN"]);
 
   const { id: deferralId } = await ctx.params;
@@ -53,10 +57,11 @@ export async function POST(req: Request, ctx: Ctx) {
   const def = defRows[0];
   if (!def) return NextResponse.json({ message: "Not found" }, { status: 404 });
 
+  // ✅ still only initiator can submit their draft
   if (def.initiatorUserId !== profile.id) {
     return NextResponse.json({ message: "Permission denied" }, { status: 403 });
   }
-  if (def.status !== "DRAFT") {
+  if (!["DRAFT", "REVISION_REQUIRED"].includes(def.status)) {
     return NextResponse.json(
       { message: "Validation error", detail: "Only drafts can be submitted" },
       { status: 400 },
@@ -116,6 +121,8 @@ export async function POST(req: Request, ctx: Ctx) {
       await tx
         .update(deferrals)
         .set({
+          workOrderNo: parsed.data.workOrderNo,
+          workOrderTitle: parsed.data.workOrderTitle ?? "",
           status: "IN_APPROVAL",
           ramCell,
           ramConsequenceLevel: ramLevel,
@@ -127,7 +134,6 @@ export async function POST(req: Request, ctx: Ctx) {
       const deptRaw = (def.initiatorDepartment ?? "").trim();
       const deptNorm = normalizeDepartment(deptRaw);
 
-      // Find mapping for responsible GM group by department
       const mappingExact = await tx
         .select({
           department: responsibleGmMappings.department,
@@ -178,18 +184,15 @@ export async function POST(req: Request, ctx: Ctx) {
           comment: "",
           signatureUrlSnapshot: "",
           signedByNameSnapshot: "",
-          assignedUserId: null, // ✅ broadcast mode
-
-          // ✅ scopes only where needed
+          assignedUserId: null, // broadcast mode
           targetDepartment: s.stepRole === "DEPARTMENT_HEAD" ? deptRaw : null,
           targetGmGroup: s.stepRole === "RESPONSIBLE_GM" ? gmGroup : null,
         } as any);
       }
     });
 
+    // ✅ activates first step and notifies approvers
     await activateFirstStep(deferralId);
-    // ✅ No submit notification to initiator anymore.
-    // Approvers will be notified when step becomes active by activateFirstStep().
 
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (err: any) {

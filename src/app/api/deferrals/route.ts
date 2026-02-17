@@ -1,3 +1,4 @@
+// src/app/api/deferrals/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { randomUUID } from "crypto";
@@ -16,8 +17,9 @@ const zNullableDateString = z.preprocess((v) => {
 }, z.string().datetime().nullable());
 
 const CreateDeferralSchema = z.object({
-  // allow missing -> default from profile.department
   initiatorDepartment: z.string().min(1).optional(),
+  workOrderNo: z.string().optional().default(""),
+  workOrderTitle: z.string().optional().default(""),
 
   equipmentTag: z.string().optional().default(""),
   equipmentDescription: z.string().optional().default(""),
@@ -36,19 +38,35 @@ const CreateDeferralSchema = z.object({
 
   // IMPORTANT: coerce to number (form input gives strings)
   severity: z.coerce.number().int().min(1).max(5).default(1),
-
   likelihood: z.string().optional().default("A"),
 });
 
 function makeDeferralCode() {
-  const t = Date.now().toString().slice(-6);
-  return `WDDM-N-${t}`;
+  // 6 chars base36, uppercase => ~2.1B combos
+  const s = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `WDDM-N-${s}`;
+}
+
+async function generateUniqueDeferralCode() {
+  for (let i = 0; i < 10; i++) {
+    const code = makeDeferralCode();
+    const exists = await db
+      .select({ id: deferrals.id })
+      .from(deferrals)
+      .where(eq(deferrals.deferralCode, code))
+      .limit(1);
+
+    if (!exists[0]) return code;
+  }
+  // fallback if extremely unlucky
+  return `WDDM-N-${Date.now().toString().slice(-6)}`;
 }
 
 export async function GET(req: Request) {
   const profile = await getBusinessProfile();
-  if (!profile)
+  if (!profile) {
     return NextResponse.json({ message: "Permission denied" }, { status: 401 });
+  }
 
   const url = new URL(req.url);
   const scope = (url.searchParams.get("scope") ?? "active").toLowerCase();
@@ -78,9 +96,11 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const profile = await getBusinessProfile();
-  if (!profile)
+  if (!profile) {
     return NextResponse.json({ message: "Permission denied" }, { status: 401 });
+  }
 
+  // allow admin to create draft too
   if (profile.role !== "ENGINEER_APPLICANT" && profile.role !== "ADMIN") {
     return NextResponse.json({ message: "Permission denied" }, { status: 403 });
   }
@@ -103,6 +123,7 @@ export async function POST(req: Request) {
     profile.department ??
     ""
   ).trim();
+
   if (!initiatorDepartment) {
     return NextResponse.json(
       {
@@ -119,47 +140,72 @@ export async function POST(req: Request) {
 
   const id = randomUUID();
 
-  await db.insert(deferrals).values({
-    id,
-    deferralCode: makeDeferralCode(),
-    initiatorUserId: profile.id,
-    initiatorDepartment,
+  // ✅ retry a few times if code collision ever happens
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      // prefer a DB-checked code
+      const code =
+        attempt === 0 ? await generateUniqueDeferralCode() : makeDeferralCode();
 
-    equipmentTag: parsed.data.equipmentTag,
-    equipmentDescription: parsed.data.equipmentDescription,
-    safetyCriticality: parsed.data.safetyCriticality,
-    taskCriticality: parsed.data.taskCriticality,
+      await db.insert(deferrals).values({
+        id,
+        deferralCode: code,
+        initiatorUserId: profile.id,
+        initiatorDepartment,
+        workOrderNo: parsed.data.workOrderNo,
+        workOrderTitle: parsed.data.workOrderTitle,
 
-    lafdStartDate: parsed.data.lafdStartDate
-      ? new Date(parsed.data.lafdStartDate)
-      : null,
-    lafdEndDate: parsed.data.lafdEndDate
-      ? new Date(parsed.data.lafdEndDate)
-      : null,
+        equipmentTag: parsed.data.equipmentTag,
+        equipmentDescription: parsed.data.equipmentDescription,
+        safetyCriticality: parsed.data.safetyCriticality,
+        taskCriticality: parsed.data.taskCriticality,
 
-    description: parsed.data.description,
-    justification: parsed.data.justification,
-    consequence: parsed.data.consequence,
-    mitigations: parsed.data.mitigations,
+        lafdStartDate: parsed.data.lafdStartDate
+          ? new Date(parsed.data.lafdStartDate)
+          : null,
+        lafdEndDate: parsed.data.lafdEndDate
+          ? new Date(parsed.data.lafdEndDate)
+          : null,
 
-    riskCategory: parsed.data.riskCategory,
-    severity,
-    likelihood,
+        description: parsed.data.description,
+        justification: parsed.data.justification,
+        consequence: parsed.data.consequence,
+        mitigations: parsed.data.mitigations,
 
-    ramCell: computeRamCell(severity, likelihood),
-    ramConsequenceLevel: computeRamConsequence(severity, likelihood),
+        riskCategory: parsed.data.riskCategory,
+        severity,
+        likelihood,
 
-    requiresTechnicalAuthority: false,
-    requiresAdHoc: false,
+        ramCell: computeRamCell(severity, likelihood),
+        ramConsequenceLevel: computeRamConsequence(severity, likelihood),
 
-    status: "DRAFT",
-    updatedAt: new Date(),
-  } as any);
+        requiresTechnicalAuthority: false,
+        requiresAdHoc: false,
 
-  const out = await db
-    .select()
-    .from(deferrals)
-    .where(eq(deferrals.id, id))
-    .limit(1);
-  return NextResponse.json({ item: out[0] }, { status: 201 });
+        status: "DRAFT",
+        updatedAt: new Date(),
+      } as any);
+
+      const out = await db
+        .select()
+        .from(deferrals)
+        .where(eq(deferrals.id, id))
+        .limit(1);
+
+      return NextResponse.json({ item: out[0] }, { status: 201 });
+    } catch (e: any) {
+      // if it's a unique constraint on deferral_code, retry
+      const msg = String(e?.message ?? "").toLowerCase();
+      if (msg.includes("deferral_code") || msg.includes("unique")) continue;
+      throw e;
+    }
+  }
+
+  return NextResponse.json(
+    {
+      message: "Server error",
+      detail: "Failed to generate unique deferral code",
+    },
+    { status: 500 },
+  );
 }
