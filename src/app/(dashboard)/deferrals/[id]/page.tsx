@@ -24,12 +24,9 @@ import { toast } from "sonner";
 import { StatusPill } from "@/src/components/deferral/StatusPill";
 import { ApprovalTimeline } from "@/src/components/deferral/ApprovalTimeline";
 import { SubmitDeferralDialog } from "@/src/components/deferral/SubmitDeferralDialog";
-import {
-  GmDecisionPanel,
-  type ApprovalStatus,
-} from "@/src/components/deferral/GmDecisionPanel";
 import { UploadCloud, Save } from "lucide-react";
 import { WorkOrderHistoryTab } from "@/src/components/deferral/WorkOrderHistoryTab";
+import { ApprovalStatus } from "@/src/components/deferral/GmDecisionPanel";
 type Deferral = {
   id: string;
   deferralCode: string;
@@ -66,6 +63,10 @@ type Deferral = {
 
   updatedAt: string;
   createdAt?: string;
+
+  returnedAt?: string;
+  returnedByRole?: string;
+  returnedComment?: string;
 };
 
 type Profile = {
@@ -175,7 +176,10 @@ export default function DeferralDetailsPage() {
 
   const canEditDraft = useMemo(() => {
     if (!item || !profile) return false;
-    return (item.status === "DRAFT" || item.status === "REVISION_REQUIRED") && item.initiatorUserId === profile.id;
+    return (
+      (item.status === "DRAFT" || item.status === "RETURNED") &&
+      item.initiatorUserId === profile.id
+    );
   }, [item, profile]);
   useEffect(() => {
     if (editMode && !canEditDraft) {
@@ -248,7 +252,6 @@ export default function DeferralDetailsPage() {
     [deferralId],
   );
 
-
   const queueRisksSave = useCallback(() => {
     if (!canEditDraft) return; // ✅ ADD
     pendingRiskRef.current = true;
@@ -275,6 +278,34 @@ export default function DeferralDetailsPage() {
   const [viewTab, setViewTab] = useState<"details" | "approvals" | "history">(
     "details",
   );
+
+  const [deferralHistory, setDeferralHistory] = useState<
+    {
+      cycle: number;
+      stepRole: string;
+      comment: string;
+      signedAt: string | null;
+    }[]
+  >([]);
+  const [histLoading, setHistLoading] = useState(false);
+
+  const loadDeferralHistory = useCallback(async () => {
+    if (!deferralId) return;
+    setHistLoading(true);
+    try {
+      const res = await api<{ items: any[] }>(
+        `/api/deferrals/${deferralId}/history`,
+      );
+      setDeferralHistory(res.items ?? []);
+    } finally {
+      setHistLoading(false);
+    }
+  }, [deferralId]);
+
+  useEffect(() => {
+    if (!deferralId) return;
+    void loadDeferralHistory();
+  }, [deferralId, loadDeferralHistory]);
 
   const gmApproval = useMemo(() => {
     return approvals.find((a) => a.stepRole === "RELIABILITY_GM") ?? null;
@@ -317,7 +348,7 @@ export default function DeferralDetailsPage() {
       setItem(d.item);
       hydrateLocalFromItem(d.item);
 
-      if (d.item.status !== "DRAFT") {
+      if (d.item.status === "DRAFT" || d.item.status === "RETURNED") {
         const a = await api<{ approvals: ApprovalRow[] }>(
           `/api/deferrals/${deferralId}/approvals`,
         );
@@ -745,11 +776,12 @@ export default function DeferralDetailsPage() {
             />
           )}
 
-          {!canEditDraft && (item.status === "DRAFT" || item.status === "REVISION_REQUIRED") && (
-            <Button asChild variant="secondary">
-              <Link href="/deferrals">Back</Link>
-            </Button>
-          )}
+          {!canEditDraft &&
+            (item.status === "DRAFT" || item.status === "RETURNED") && (
+              <Button asChild variant="secondary">
+                <Link href="/deferrals">Back</Link>
+              </Button>
+            )}
         </div>
       </div>
 
@@ -771,6 +803,7 @@ export default function DeferralDetailsPage() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="deferralHistory">Deferral History</TabsTrigger>
           <TabsTrigger value="print">Print</TabsTrigger>
         </TabsList>
 
@@ -1540,7 +1573,7 @@ export default function DeferralDetailsPage() {
 
         {/* APPROVALS TAB */}
         <TabsContent value="approvals" className="mt-4 space-y-6">
-          {item.status === "DRAFT" ? (
+          {item.status === "DRAFT" || item.status === "RETURNED" ? (
             <Card>
               <CardContent className="p-6 text-sm text-muted-foreground">
                 This deferral is still a draft. Submit it to start the approval
@@ -1549,20 +1582,6 @@ export default function DeferralDetailsPage() {
             </Card>
           ) : (
             <>
-              {profile?.role === "RELIABILITY_GM" && (
-                <GmDecisionPanel
-                  deferralId={item.id}
-                  initialTA={Boolean(item.requiresTechnicalAuthority)}
-                  initialAdHoc={Boolean(item.requiresAdHoc)}
-                  gmApprovalStatus={gmApprovalStatus}
-                  gmApprovalIsActive={gmApprovalIsActive}
-                  canEdit={true}
-                  onSaved={async () => {
-                    await load();
-                    router.refresh();
-                  }}
-                />
-              )}
 
               <ApprovalTimeline deferralId={item.id} />
             </>
@@ -1577,7 +1596,48 @@ export default function DeferralDetailsPage() {
             onCountChange={setHistoryCount}
           />
         </TabsContent>
-        {/* WORK ORDER HISTORY TAB */}
+
+        {/* DEFERRAL HISTORY TAB */}
+        <TabsContent value="deferralHistory" className="mt-4 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Deferral History</CardTitle>
+            </CardHeader>
+
+            <CardContent>
+              {histLoading ? (
+                <div className="text-sm text-muted-foreground">Loading…</div>
+              ) : deferralHistory.length === 0 ? (
+                <div className="text-sm text-muted-foreground">
+                  No rejection/return events yet.
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {deferralHistory.map((h, idx) => (
+                    <div key={idx} className="rounded-xl border p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-medium">{h.stepRole}</div>
+                        <Badge variant="secondary">Cycle #{h.cycle}</Badge>
+                      </div>
+
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        {h.signedAt
+                          ? new Date(h.signedAt).toLocaleString()
+                          : "—"}
+                      </div>
+
+                      <div className="mt-3 whitespace-pre-wrap text-sm">
+                        {h.comment || "—"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Print TAB */}
         <TabsContent value="print" className="mt-4 space-y-6">
           <Button
             variant="secondary"

@@ -25,6 +25,7 @@ export const gmGroupEnum = pgEnum("gm_group", [
 export const approvalStatusEnum = pgEnum("approval_status", [
   "PENDING",
   "APPROVED",
+  "RETURNED", // ✅ new
   "REJECTED",
   "SKIPPED",
 ]);
@@ -32,6 +33,7 @@ export const approvalStatusEnum = pgEnum("approval_status", [
 export const deferralStatusEnum = pgEnum("deferral_status", [
   "DRAFT",
   "SUBMITTED",
+  "RETURNED", // ✅ new
   "IN_APPROVAL",
   "REJECTED",
   "APPROVED",

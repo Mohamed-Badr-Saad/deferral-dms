@@ -8,7 +8,7 @@ import { getBusinessProfile } from "@/src/lib/authz";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { computeRamCell, computeRamConsequence } from "@/src/lib/constants";
 
-const ACTIVE_STATUSES = ["DRAFT", "SUBMITTED", "IN_APPROVAL"] as const;
+const ACTIVE_STATUSES = ["DRAFT", "SUBMITTED", "IN_APPROVAL", "RETURNED"] as const;
 const HISTORY_STATUSES = ["COMPLETED", "APPROVED", "REJECTED"] as const;
 
 const zNullableDateString = z.preprocess((v) => {

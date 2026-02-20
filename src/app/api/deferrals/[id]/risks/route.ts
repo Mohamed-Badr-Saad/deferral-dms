@@ -79,7 +79,7 @@ if (!access.ok) {
   );
 }
 
-  if (!["DRAFT", "REVISION_REQUIRED"].includes(def.status)) {
+  if (!(def.status === "DRAFT" || def.status === "RETURNED")) {
     return NextResponse.json(
       { message: "Validation error", detail: "Only drafts can be edited" },
       { status: 400 },

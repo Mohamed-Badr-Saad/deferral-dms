@@ -33,6 +33,7 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
 export const DEFERRAL_STATUS = [
   "DRAFT",
   "SUBMITTED",
+  "RETURNED",
   "IN_APPROVAL",
   "REJECTED",
   "APPROVED",
@@ -44,6 +45,7 @@ export type DeferralStatus = (typeof DEFERRAL_STATUS)[number];
 export const STATUS_LABELS: Record<DeferralStatus, string> = {
   DRAFT: "Draft",
   SUBMITTED: "Submitted",
+  RETURNED: "Returned",
   IN_APPROVAL: "In Approval",
   REJECTED: "Rejected",
   APPROVED: "Approved",
@@ -52,9 +54,10 @@ export const STATUS_LABELS: Record<DeferralStatus, string> = {
 
 export const STATUS_COLORS: Record<DeferralStatus, string> = {
   DRAFT: "bg-muted text-foreground",
+  RETURNED: "bg-red-100 text-foreground",
   SUBMITTED: "bg-blue-100 text-blue-900",
   IN_APPROVAL: "bg-amber-100 text-amber-900",
-  REJECTED: "bg-red-100 text-red-900",
+  REJECTED: "bg-red-300 text-red-900",
   APPROVED: "bg-green-100 text-green-900",
   COMPLETED: "bg-emerald-100 text-emerald-900",
 };

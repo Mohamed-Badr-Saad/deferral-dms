@@ -5,7 +5,6 @@ import { deferrals } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
 import { eq } from "drizzle-orm";
 import { computeRamCell, computeRamConsequence } from "@/src/lib/constants";
-import { canViewDeferral } from "@/src/lib/authz/deferralAccess";
 
 const zNullableDateString = z.preprocess((v) => {
   if (v === "" || v === undefined) return null;
@@ -20,19 +19,15 @@ const PatchSchema = z.object({
   taskCriticality: z.string().optional(),
   workOrderNo: z.string().optional(),
   workOrderTitle: z.string().optional(),
-  // ✅ ADD THESE
   lafdStartDate: zNullableDateString.optional(),
   lafdEndDate: zNullableDateString.optional(),
-
   description: z.string().optional(),
   justification: z.string().optional(),
   consequence: z.string().optional(),
   mitigations: z.string().optional(),
-
   riskCategory: z.string().optional(),
   severity: z.coerce.number().int().min(1).max(5).optional(),
   likelihood: z.string().optional(),
-
   requiresTechnicalAuthority: z.boolean().optional(),
   requiresAdHoc: z.boolean().optional(),
 });
@@ -45,20 +40,19 @@ export async function GET(_req: Request, ctx: Ctx) {
     return NextResponse.json({ message: "Permission denied" }, { status: 401 });
 
   const { id } = await ctx.params;
-  if (!id || id === "undefined") {
+  if (!id || id === "undefined")
     return NextResponse.json({ message: "Invalid id" }, { status: 400 });
-  }
 
   const rows = await db
     .select()
     .from(deferrals)
     .where(eq(deferrals.id, id))
     .limit(1);
-
   const item = rows[0] ?? null;
   if (!item)
     return NextResponse.json({ message: "Not found" }, { status: 404 });
 
+  // ✅ “anyone can view” (authenticated)
   return NextResponse.json({ item }, { status: 200 });
 }
 
@@ -68,9 +62,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ message: "Permission denied" }, { status: 401 });
 
   const { id } = await ctx.params;
-  if (!id || id === "undefined") {
+  if (!id || id === "undefined")
     return NextResponse.json({ message: "Invalid id" }, { status: 400 });
-  }
 
   const body = await req.json();
   const parsed = PatchSchema.safeParse(body);
@@ -86,32 +79,26 @@ export async function PATCH(req: Request, ctx: Ctx) {
     .from(deferrals)
     .where(eq(deferrals.id, id))
     .limit(1);
-
   const item = rows[0];
   if (!item)
     return NextResponse.json({ message: "Not found" }, { status: 404 });
 
-  // Only initiator can edit draft
-const access = await canViewDeferral(id, profile.id);
-if (!access.ok) {
-  return NextResponse.json(
-    { message: access.reason === "not_found" ? "Not found" : "Permission denied" },
-    { status: access.reason === "not_found" ? 404 : 403 },
-  );
-}
-  if (!["DRAFT", "REVISION_REQUIRED"].includes(item.status)) {
+  // ✅ Only initiator edits + allow DRAFT or RETURNED
+  if (item.initiatorUserId !== profile.id) {
+    return NextResponse.json({ message: "Permission denied" }, { status: 403 });
+  }
+  if (!(item.status === "DRAFT" || item.status === "RETURNED")) {
     return NextResponse.json(
-      { message: "Validation error", detail: "Only drafts can be edited" },
+      {
+        message: "Validation error",
+        detail: "Only drafts/returned can be edited",
+      },
       { status: 400 },
     );
   }
 
-  const next: any = {
-    ...parsed.data,
-    updatedAt: new Date(),
-  };
+  const next: any = { ...parsed.data, updatedAt: new Date() };
 
-  // ✅ Convert ISO -> Date for DB columns
   if ("lafdStartDate" in parsed.data) {
     next.lafdStartDate = parsed.data.lafdStartDate
       ? new Date(parsed.data.lafdStartDate)
@@ -123,7 +110,6 @@ if (!access.ok) {
       : null;
   }
 
-  // If severity/likelihood changed, recompute RAM derived fields
   const nextSeverity = parsed.data.severity ?? item.severity ?? 1;
   const nextLikelihood = (
     parsed.data.likelihood ??
@@ -144,6 +130,7 @@ if (!access.ok) {
     next.likelihood = String(nextLikelihood);
   }
 
+  // ✅ if it was RETURNED and initiator edits, keep RETURNED (don’t auto-change)
   await db.update(deferrals).set(next).where(eq(deferrals.id, id));
 
   const out = await db
@@ -151,6 +138,5 @@ if (!access.ok) {
     .from(deferrals)
     .where(eq(deferrals.id, id))
     .limit(1);
-
   return NextResponse.json({ item: out[0] }, { status: 200 });
 }

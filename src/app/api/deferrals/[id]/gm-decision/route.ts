@@ -1,9 +1,10 @@
+// src/app/api/deferrals/[id]/gm-decision/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/src/db";
 import { deferralApprovals, deferrals } from "@/src/db/schema";
 import { getBusinessProfile, requireRole } from "@/src/lib/authz";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 const BodySchema = z.object({
@@ -21,7 +22,7 @@ export async function POST(req: Request, ctx: Ctx) {
 
   const { id: deferralId } = await ctx.params;
 
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
   const parsed = BodySchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
@@ -35,47 +36,48 @@ export async function POST(req: Request, ctx: Ctx) {
     .from(deferrals)
     .where(eq(deferrals.id, deferralId))
     .limit(1);
-  const def = dRows[0];
+  const def = dRows[0] as any;
   if (!def) return NextResponse.json({ message: "Not found" }, { status: 404 });
 
   if (def.status !== "IN_APPROVAL") {
     return NextResponse.json(
       {
         message: "Validation error",
-        detail: "GM decision can only be set after submission (IN_APPROVAL).",
+        detail: "GM decision can only be set in IN_APPROVAL.",
       },
       { status: 400 },
     );
   }
 
-  const wantTA = parsed.data.requiresTechnicalAuthority;
-  const wantAD = parsed.data.requiresAdHoc;
+  const cycle = Number(def.approvalCycle ?? 0);
+  const wantTA = Boolean(parsed.data.requiresTechnicalAuthority);
+  const wantAD = Boolean(parsed.data.requiresAdHoc);
 
   try {
     await db.transaction(async (tx) => {
+      // load approvals for CURRENT cycle only
       const approvals = await tx
         .select()
         .from(deferralApprovals)
-        .where(eq(deferralApprovals.deferralId, deferralId))
+        .where(
+          and(
+            eq(deferralApprovals.deferralId, deferralId),
+            eq(deferralApprovals.cycle, cycle),
+          ),
+        )
         .orderBy(asc(deferralApprovals.stepOrder));
 
-      const gm = approvals.find((a) => a.stepRole === "RELIABILITY_GM");
+      const gm = approvals.find((a: any) => a.stepRole === "RELIABILITY_GM");
       if (!gm)
         throw Object.assign(new Error("Reliability GM step is missing."), {
           status: 400,
         });
 
-      // ✅ Editable ONLY while GM step is pending AND active
-      if (gm.status !== "PENDING") {
-        throw Object.assign(
-          new Error("Decision locked. Reliability GM has already acted."),
-          { status: 400 },
-        );
-      }
-      if (!gm.isActive) {
+      // must be active & pending
+      if (gm.status !== "PENDING" || !gm.isActive) {
         throw Object.assign(
           new Error(
-            "Decision can only be set when Reliability GM step is active.",
+            "Decision can only be set when Reliability GM step is ACTIVE and PENDING.",
           ),
           { status: 400 },
         );
@@ -91,60 +93,74 @@ export async function POST(req: Request, ctx: Ctx) {
         } as any)
         .where(eq(deferrals.id, deferralId));
 
-      // Ensure TA/ADHOC rows exist right after GM step_order (insert if missing)
-      // We won't delete them; we SKIP them.
-      const existingTA =
-        approvals.find((a) => a.stepRole === "TECHNICAL_AUTHORITY") ?? null;
-      const existingAD = approvals.find((a) => a.stepRole === "AD_HOC") ?? null;
+      // Find responsible segment (first step role among RESP/SOD/DFGM)
+      const responsible = approvals.find((a: any) =>
+        ["RESPONSIBLE_GM", "SOD", "DFGM"].includes(String(a.stepRole)),
+      );
 
-      // Insert missing rows (at gm.stepOrder+1 and +2) ONLY if needed.
-      // We keep it simple: if missing, insert at end with correct ordering by using max+1.
-      // (No shifting needed because we are not trying to place visually between steps; timeline ordering is stepOrder though)
-      // Better: keep your previous shifting logic if you already rely on strict ordering.
-      // Here: we assume you already implemented insertion correctly before Responsible segment.
-      if (!existingTA && wantTA) {
-        await tx.insert(deferralApprovals).values({
-          id: randomUUID(),
-          deferralId,
-          stepOrder: gm.stepOrder + 1,
-          stepRole: "TECHNICAL_AUTHORITY",
-          status: "PENDING",
-          isActive: false,
-          comment: "",
-          signatureUrlSnapshot: "",
-          signedByUserId: null,
-          signedAt: null,
-          signedByNameSnapshot: "",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        } as any);
+      // If no responsible yet, we still insert right after GM.
+      const insertBaseOrder = gm.stepOrder + 1;
+
+      const needInsertRoles: string[] = [];
+      if (wantTA) needInsertRoles.push("TECHNICAL_AUTHORITY");
+      if (wantAD) needInsertRoles.push("AD_HOC");
+
+      // Check existing TA/AD within CURRENT cycle
+      const existing = new Map<string, any>();
+      for (const a of approvals as any[]) existing.set(String(a.stepRole), a);
+
+      const missing: string[] = needInsertRoles.filter((r) => !existing.get(r));
+
+      // If we need to insert missing steps, we must shift stepOrder to make space.
+      // Shift all steps with stepOrder >= insertBaseOrder by +missingCount
+      if (missing.length > 0) {
+        await tx
+          .update(deferralApprovals)
+          .set({
+            stepOrder: sql`${deferralApprovals.stepOrder} + ${missing.length}`,
+            updatedAt: new Date(),
+          } as any)
+          .where(
+            and(
+              eq(deferralApprovals.deferralId, deferralId),
+              eq(deferralApprovals.cycle, cycle),
+              sql`${deferralApprovals.stepOrder} >= ${insertBaseOrder}`,
+            ),
+          );
+
+        // Insert missing roles sequentially after GM
+        let order = insertBaseOrder;
+        for (const role of missing) {
+          await tx.insert(deferralApprovals).values({
+            id: randomUUID(),
+            deferralId,
+            cycle,
+            stepOrder: order++,
+            stepRole: role as any,
+            status: "PENDING",
+            isActive: false,
+            comment: "",
+            signatureUrlSnapshot: "",
+            signedByUserId: null,
+            signedAt: null,
+            signedByNameSnapshot: "",
+            assignedUserId: null,
+            targetDepartment: null,
+            targetGmGroup: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as any);
+        }
       }
 
-      if (!existingAD && wantAD) {
-        await tx.insert(deferralApprovals).values({
-          id: randomUUID(),
-          deferralId,
-          stepOrder: gm.stepOrder + 2,
-          stepRole: "AD_HOC",
-          status: "PENDING",
-          isActive: false,
-          comment: "",
-          signatureUrlSnapshot: "",
-          signedByUserId: null,
-          signedAt: null,
-          signedByNameSnapshot: "",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        } as any);
-      }
-
-      // Reload TA/ADHOC after potential insertion
+      // If user unchecked TA/AD and row exists in current cycle => mark SKIPPED
       const taAd = await tx
         .select()
         .from(deferralApprovals)
         .where(
           and(
             eq(deferralApprovals.deferralId, deferralId),
+            eq(deferralApprovals.cycle, cycle),
             inArray(deferralApprovals.stepRole, [
               "TECHNICAL_AUTHORITY",
               "AD_HOC",
@@ -153,10 +169,9 @@ export async function POST(req: Request, ctx: Ctx) {
         )
         .orderBy(asc(deferralApprovals.stepOrder));
 
-      for (const a of taAd) {
+      for (const a of taAd as any[]) {
         if (a.stepRole === "TECHNICAL_AUTHORITY") {
           if (!wantTA) {
-            // unchecked => SKIP (and deactivate if active)
             await tx
               .update(deferralApprovals)
               .set({
@@ -166,14 +181,12 @@ export async function POST(req: Request, ctx: Ctx) {
               } as any)
               .where(eq(deferralApprovals.id, a.id));
           } else if (a.status === "SKIPPED") {
-            // re-checked => back to PENDING
             await tx
               .update(deferralApprovals)
               .set({ status: "PENDING", updatedAt: new Date() } as any)
               .where(eq(deferralApprovals.id, a.id));
           }
         }
-
         if (a.stepRole === "AD_HOC") {
           if (!wantAD) {
             await tx
@@ -192,50 +205,6 @@ export async function POST(req: Request, ctx: Ctx) {
           }
         }
       }
-
-      // Safety: if no active pending remains, activate first pending step_order
-      const activePending = await tx
-        .select()
-        .from(deferralApprovals)
-        .where(
-          and(
-            eq(deferralApprovals.deferralId, deferralId),
-            eq(deferralApprovals.isActive, true),
-            eq(deferralApprovals.status, "PENDING"),
-          ),
-        )
-        .limit(1);
-
-      if (activePending.length === 0) {
-        await tx
-          .update(deferralApprovals)
-          .set({ isActive: false } as any)
-          .where(eq(deferralApprovals.deferralId, deferralId));
-
-        const pending = await tx
-          .select()
-          .from(deferralApprovals)
-          .where(
-            and(
-              eq(deferralApprovals.deferralId, deferralId),
-              eq(deferralApprovals.status, "PENDING"),
-            ),
-          )
-          .orderBy(asc(deferralApprovals.stepOrder))
-          .limit(1);
-
-        if (pending[0]) {
-          await tx
-            .update(deferralApprovals)
-            .set({ isActive: true } as any)
-            .where(
-              and(
-                eq(deferralApprovals.deferralId, deferralId),
-                eq(deferralApprovals.stepOrder, pending[0].stepOrder),
-              ),
-            );
-        }
-      }
     });
 
     return NextResponse.json({ ok: true }, { status: 200 });
@@ -244,7 +213,7 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json(
       {
         message: status === 500 ? "Server error" : "Validation error",
-        detail: err?.message ?? "Server error",
+        detail: err?.message ?? "",
       },
       { status },
     );

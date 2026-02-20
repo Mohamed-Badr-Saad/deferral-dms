@@ -71,6 +71,13 @@
       "when": 1770310680238,
       "tag": "0009_mysterious_the_twelve",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1771356098319,
+      "tag": "0010_special_firestar",
+      "breakpoints": true
     }
   ]
 }

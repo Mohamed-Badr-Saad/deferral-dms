@@ -1,20 +1,21 @@
+// src/app/api/approvals/my/route.ts
 import { NextResponse } from "next/server";
 import { db } from "@/src/db";
 import { deferralApprovals, deferrals } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
-import { and, eq, or, isNull, desc, asc } from "drizzle-orm";
+import { and, eq, or, isNull, desc, asc, inArray } from "drizzle-orm";
 
 function normalizeDepartment(input: string) {
   return (input ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 }
+
+const PARALLEL_ROLES = ["RESPONSIBLE_GM", "SOD", "DFGM"] as const;
 
 export async function GET() {
   const profile = await getBusinessProfile();
   if (!profile) {
     return NextResponse.json({ message: "Permission denied" }, { status: 401 });
   }
-
-  const myDeptNorm = normalizeDepartment(profile.department ?? "");
 
   const pendingRows = await db
     .select({
@@ -27,6 +28,10 @@ export async function GET() {
       and(
         eq(deferralApprovals.status, "PENDING"),
         eq(deferralApprovals.isActive, true),
+
+        // ✅ must be CURRENT cycle only
+        eq(deferrals.approvalCycle, deferralApprovals.cycle),
+
         eq(deferralApprovals.stepRole, profile.role),
 
         // ✅ Department scope (if present)
@@ -36,7 +41,6 @@ export async function GET() {
         ),
 
         // ✅ GM group scope (if present)
-        // If user's gmGroup is null and a target exists, this will NOT match (correct behavior).
         or(
           isNull(deferralApprovals.targetGmGroup),
           eq(deferralApprovals.targetGmGroup, profile.gmGroup),
@@ -45,7 +49,6 @@ export async function GET() {
     )
     .orderBy(desc(deferrals.updatedAt), asc(deferralApprovals.stepOrder));
 
-  // ✅ History = signed by me (kept as-is)
   const historyRows = await db
     .select({
       approval: deferralApprovals,
@@ -66,21 +69,29 @@ export async function GET() {
     { total: number; approved: number; pending: number }
   > = {};
 
+  // Only compute for deferrals that are currently shown as pending cards
   for (const row of pendingRows) {
     const defId = row.deferral.id;
+    const cycle = Number((row.deferral as any).approvalCycle ?? 0);
 
-    const sameDef = await db
-      .select({
-        status: deferralApprovals.status,
-      })
+    // Count only PARALLEL segment roles and only in CURRENT cycle
+    const seg = await db
+      .select({ status: deferralApprovals.status })
       .from(deferralApprovals)
-      .where(eq(deferralApprovals.deferralId, defId));
+      .where(
+        and(
+          eq(deferralApprovals.deferralId, defId),
+          eq(deferralApprovals.cycle, cycle),
+          inArray(deferralApprovals.stepRole, PARALLEL_ROLES as any),
+        ),
+      );
 
-    const total = sameDef.length;
-    const approved = sameDef.filter((x) => x.status === "APPROVED").length;
-    const pending = sameDef.filter((x) => x.status === "PENDING").length;
-
-    parallelCounts[defId] = { total, approved, pending };
+    if (seg.length > 0) {
+      const total = seg.length;
+      const approved = seg.filter((x: any) => x.status === "APPROVED").length;
+      const pending = seg.filter((x: any) => x.status === "PENDING").length;
+      parallelCounts[defId] = { total, approved, pending };
+    }
   }
 
   return NextResponse.json(

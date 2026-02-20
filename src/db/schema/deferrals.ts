@@ -42,4 +42,13 @@ export const deferrals = pgTable("deferrals", {
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+
+
+  // ✅ tracks current approvals generation (0 before first submit, then 1,2,3..)
+  approvalCycle: integer("approval_cycle").notNull().default(0),
+
+  // ✅ return-for-revision metadata
+  returnedAt: timestamp("returned_at", { withTimezone: true }).default(null),
+  returnedByRole: text("returned_by_role").default(null),
+  returnedComment: text("returned_comment").default(null),
 });

@@ -73,7 +73,7 @@ export async function POST(req: Request, ctx: Ctx) {
   }
 
   // (optional safety) only allow attachments while draft
-  if (!["DRAFT", "REVISION_REQUIRED"].includes(def.status)) {
+  if (!(def.status === "DRAFT" || def.status === "RETURNED")) {
     return NextResponse.json(
       {
         message: "Validation error",

@@ -9,7 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { api } from "@/src/lib/api";
 import { toast } from "sonner";
 
-export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "SKIPPED";
+export type ApprovalStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "SKIPPED"
+  | "RETURNED";
 
 export function GmDecisionPanel(props: {
   deferralId: string;
@@ -31,6 +36,9 @@ export function GmDecisionPanel(props: {
   const [busy, setBusy] = useState(false);
 
   const isLocked = useMemo(() => {
+    console.log(props.gmApprovalStatus);
+    console.log(props.gmApprovalIsActive);
+
     // If GM approval doesn't exist, treat as locked (safer)
     if (!props.gmApprovalStatus) return true;
 

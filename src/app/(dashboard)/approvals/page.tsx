@@ -10,6 +10,53 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusPill } from "@/src/components/deferral/StatusPill";
 import { USER_ROLE_LABELS } from "@/src/lib/constants";
 import { toast } from "sonner";
+import {
+  GmDecisionPanel,
+  type ApprovalStatus,
+} from "@/src/components/deferral/GmDecisionPanel";
+import { useRouter } from "next/navigation";
+
+type Deferral = {
+  id: string;
+  deferralCode: string;
+  status: string;
+  workOrderNo: string;
+  workOrderTitle: string;
+  initiatorUserId: string;
+  initiatorDepartment: string;
+
+  equipmentTag: string;
+  equipmentDescription: string;
+
+  taskCriticality: string; // YES/NO
+  safetyCriticality: string; // YES/NO
+
+  lafdStartDate: string | null;
+  lafdEndDate: string | null;
+
+  description: string;
+  justification: string;
+  consequence: string;
+
+  mitigations: string;
+
+  // legacy single RAM fields (still in deferrals table)
+  riskCategory: string;
+  severity: number;
+  likelihood: string;
+  ramCell: string;
+  ramConsequenceLevel: string;
+
+  requiresTechnicalAuthority: boolean;
+  requiresAdHoc: boolean;
+
+  updatedAt: string;
+  createdAt?: string;
+
+  returnedAt?: string;
+  returnedByRole?: string;
+  returnedComment?: string;
+};
 
 type ApprovalRow = {
   approval: {
@@ -29,6 +76,13 @@ type ApprovalRow = {
     status: string;
     updatedAt: string;
   };
+};
+type Profile = {
+  id: string;
+  role: string;
+  name: string;
+  department: string;
+  position: string;
 };
 
 type ApiRes = {
@@ -52,16 +106,18 @@ export default function ApprovalsPage() {
   // per-approval comment editing
   const [comment, setComment] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
-
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const router = useRouter();
   async function load() {
     setLoading(true);
     try {
+      const p = await api<{ profile: Profile }>("/api/profile");
+      setProfile(p.profile);
       const res = await api<ApiRes>("/api/approvals/my");
       setData(res);
     } catch (e: any) {
-      toast("Error",{
+      toast("Error", {
         description: e.message ?? "Failed to load approvals",
-        
       });
     } finally {
       setLoading(false);
@@ -84,17 +140,15 @@ export default function ApprovalsPage() {
         {
           method: "POST",
           json: { comment: (comment[approvalId] ?? "").trim() },
-        }
+        },
       );
 
       if (res.warning) {
-        toast("Signature missing",{
-          
+        toast("Signature missing", {
           description: res.warning,
-          
         });
       } else {
-        toast("Approved",{
+        toast("Approved", {
           description: "Approval recorded successfully.",
         });
       }
@@ -102,7 +156,7 @@ export default function ApprovalsPage() {
       setComment((c) => ({ ...c, [approvalId]: "" }));
       await load();
     } catch (e: any) {
-      toast("Error",{
+      toast("Error", {
         description: e.message ?? "Approve failed",
       });
     } finally {
@@ -113,9 +167,8 @@ export default function ApprovalsPage() {
   async function refuse(approvalId: string) {
     const c = (comment[approvalId] ?? "").trim();
     if (c.length < 2) {
-      toast("Validation error",{
+      toast("Validation error", {
         description: "Comment is required to refuse.",
-        
       });
       return;
     }
@@ -127,7 +180,7 @@ export default function ApprovalsPage() {
         json: { comment: c, route: "TO_RELIABILITY_ENGINEER" },
       });
 
-      toast("Rejected",{
+      toast("Rejected", {
         description:
           "Deferral rejected and returned to Reliability Engineer + Initiator.",
       });
@@ -176,6 +229,7 @@ export default function ApprovalsPage() {
           ) : (
             pending.map((row) => {
               const p = data?.parallelCounts?.[row.deferral.id];
+
               return (
                 <Card key={row.approval.id}>
                   <CardHeader className="flex flex-row items-start justify-between gap-4">
@@ -222,6 +276,25 @@ export default function ApprovalsPage() {
                   </CardHeader>
 
                   <CardContent className="space-y-3">
+                    {profile?.role === "RELIABILITY_GM" &&
+                      row.approval.stepRole === "RELIABILITY_GM" && (
+                        <GmDecisionPanel
+                          deferralId={row.deferral.id}
+                          initialTA={Boolean(
+                            (row.deferral as any).requiresTechnicalAuthority,
+                          )}
+                          initialAdHoc={Boolean(
+                            (row.deferral as any).requiresAdHoc,
+                          )}
+                          gmApprovalStatus={row.approval.status as any}
+                          gmApprovalIsActive={Boolean(row.approval.isActive)}
+                          canEdit={true}
+                          onSaved={async () => {
+                            await load();
+                            router.refresh();
+                          }}
+                        />
+                      )}
                     <div className="space-y-2">
                       <div className="text-xs text-muted-foreground">
                         Comment (optional for approve, required for reject)
