@@ -58,6 +58,9 @@
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 217 91% 60%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 47.4% 11.2%;
   }
 
   .dark {
@@ -85,6 +88,8 @@
     --border: 217 19% 18%;
     --input: 217 19% 18%;
     --ring: 217 91% 60%;
+    --popover: 222.2 47.4% 13%;
+--popover-foreground: 210 40% 98%;
   }
 
   html,
@@ -97,19 +102,32 @@
     color: hsl(var(--foreground));
   }
 
-  @layer components {
+}
+
+@layer components {
   [data-radix-select-content] {
     @apply z-50 
-      w-[--radix-select-trigger-width]
-      p-0 
-      overflow-hidden 
-      rounded-xl 
-      border 
-      bg-white 
-      text-slate-900 
-      shadow-lg 
-      dark:bg-slate-950 
-      dark:text-slate-50;
+    w-[--radix-select-trigger-width]
+    p-0 
+    overflow-hidden 
+    rounded-xl 
+    border 
+    bg-white 
+    text-slate-900 
+    shadow-lg 
+    dark:bg-slate-950 
+    dark:text-slate-50;
   }
-}
+  /* Fix transparent shadcn/radix Select */
+  [data-radix-popper-content-wrapper] > div,
+  [role="listbox"],
+  [data-radix-select-content] {
+    background: hsl(var(--popover)) !important;
+    color: hsl(var(--popover-foreground)) !important;
+    border: 1px solid hsl(var(--border)) !important;
+  }
+
+  button[role="combobox"] {
+    background: hsl(var(--background)) !important;
+  }
 }
