@@ -1,5 +1,13 @@
+// src/lib/pdf/DeferralPdf.tsx
 import React from "react";
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import {
+  Document,
+  Page,
+  Text,
+  View,
+  StyleSheet,
+  Image,
+} from "@react-pdf/renderer";
 
 export type PdfDeferral = {
   deferralCode: string;
@@ -44,6 +52,9 @@ export type PdfApprovalRow = {
   signerPosition: string;
   signedAt: Date | null;
   comment: string;
+
+  // ✅ NEW: already-resolved, fetch-safe image for react-pdf
+  signatureDataUri?: string | null;
 };
 
 function fmtDate(d: Date | null | undefined) {
@@ -138,6 +149,19 @@ const styles = StyleSheet.create({
     borderRightColor: "#000",
     padding: 6,
   },
+
+  // ✅ NEW: signature cell layout
+  sigWrap: {
+    width: "100%",
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sigImg: {
+    width: 70,
+    height: 24,
+    objectFit: "contain",
+  },
 });
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -175,15 +199,36 @@ export function DeferralPdfDoc(props: {
           <InfoRow label="Initiator Name" value={deferral.initiatorName} />
           <InfoRow label="Job Title" value={deferral.initiatorPosition} />
           <InfoRow label="Department" value={deferral.initiatorDepartment} />
-          <InfoRow label="Work Order(s) Number(s)" value={deferral.workOrderNo} />
+          <InfoRow
+            label="Work Order(s) Number(s)"
+            value={deferral.workOrderNo}
+          />
           <InfoRow label="Work Order Title" value={deferral.workOrderTitle} />
-          <InfoRow label="Equipment Full Code(s)" value={deferral.equipmentTag} />
-          <InfoRow label="Equipment Description" value={deferral.equipmentDescription} />
-          <InfoRow label="Equipment Safety Criticality" value={deferral.safetyCriticality} />
+          <InfoRow
+            label="Equipment Full Code(s)"
+            value={deferral.equipmentTag}
+          />
+          <InfoRow
+            label="Equipment Description"
+            value={deferral.equipmentDescription}
+          />
+          <InfoRow
+            label="Equipment Safety Criticality"
+            value={deferral.safetyCriticality}
+          />
           <InfoRow label="Task Criticality" value={deferral.taskCriticality} />
-          <InfoRow label="Deferral Request Date" value={fmtDate(deferral.createdAt)} />
-          <InfoRow label="Current LAFD" value={fmtDate(deferral.lafdStartDate)} />
-          <InfoRow label="Deferred To (New LAFD)" value={fmtDate(deferral.lafdEndDate)} />
+          <InfoRow
+            label="Deferral Request Date"
+            value={fmtDate(deferral.createdAt)}
+          />
+          <InfoRow
+            label="Current LAFD"
+            value={fmtDate(deferral.lafdStartDate)}
+          />
+          <InfoRow
+            label="Deferred To (New LAFD)"
+            value={fmtDate(deferral.lafdEndDate)}
+          />
         </View>
 
         <View style={styles.spacer} />
@@ -222,7 +267,9 @@ export function DeferralPdfDoc(props: {
 
         <View style={styles.riskTable}>
           <View style={styles.riskHeaderRow}>
-            <Text style={[styles.riskCellCat, { backgroundColor: "#d0d0d0" }]} />
+            <Text
+              style={[styles.riskCellCat, { backgroundColor: "#d0d0d0" }]}
+            />
             <Text style={[styles.riskCell, { width: "18%", fontWeight: 700 }]}>
               Severity
             </Text>
@@ -239,57 +286,113 @@ export function DeferralPdfDoc(props: {
             </Text>
           </View>
 
-          {(["PEOPLE", "ASSET", "ENVIRONMENT", "REPUTATION"] as const).map((cat) => {
-            const r = pickRisk(cat);
-            return (
-              <View key={cat} style={styles.riskRow}>
-                <Text style={styles.riskCellCat}>
-                  {cat === "PEOPLE"
-                    ? "People"
-                    : cat === "ASSET"
-                      ? "Asset"
-                      : cat === "ENVIRONMENT"
-                        ? "Environment"
-                        : "Reputation"}
-                </Text>
-                <Text style={[styles.riskCell, { width: "18%" }]}>
-                  {r ? String(r.severity) : "—"}
-                </Text>
-                <Text style={[styles.riskCell, { width: "18%" }]}>
-                  {r ? r.likelihood : "—"}
-                </Text>
-                <Text style={[styles.riskCell, { width: "46%", borderRightWidth: 0 }]}>
-                  {r?.justification ?? ""}
-                </Text>
-              </View>
-            );
-          })}
+          {(["PEOPLE", "ASSET", "ENVIRONMENT", "REPUTATION"] as const).map(
+            (cat) => {
+              const r = pickRisk(cat);
+              return (
+                <View key={cat} style={styles.riskRow}>
+                  <Text style={styles.riskCellCat}>
+                    {cat === "PEOPLE"
+                      ? "People"
+                      : cat === "ASSET"
+                        ? "Asset"
+                        : cat === "ENVIRONMENT"
+                          ? "Environment"
+                          : "Reputation"}
+                  </Text>
+                  <Text style={[styles.riskCell, { width: "18%" }]}>
+                    {r ? String(r.severity) : "—"}
+                  </Text>
+                  <Text style={[styles.riskCell, { width: "18%" }]}>
+                    {r ? r.likelihood : "—"}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.riskCell,
+                      { width: "46%", borderRightWidth: 0 },
+                    ]}
+                  >
+                    {r?.justification ?? ""}
+                  </Text>
+                </View>
+              );
+            },
+          )}
         </View>
 
+        <View style={styles.spacer} />
+      </Page>
+
+      <Page size="A4" style={styles.page}>
         <View style={styles.approvalsBand}>
           <Text>Approvals / Signatures</Text>
         </View>
 
         <View style={styles.approvalsTable}>
           <View style={styles.approvalsHeader}>
-            <Text style={[styles.aCell, { width: "16%", fontWeight: 700 }]}>Order</Text>
-            <Text style={[styles.aCell, { width: "22%", fontWeight: 700 }]}>Role</Text>
-            <Text style={[styles.aCell, { width: "22%", fontWeight: 700 }]}>Name</Text>
-            <Text style={[styles.aCell, { width: "18%", fontWeight: 700 }]}>Position</Text>
-            <Text style={[styles.aCell, { width: "12%", fontWeight: 700 }]}>Date</Text>
-            <Text style={[styles.aCell, { width: "10%", fontWeight: 700, borderRightWidth: 0 }]}>
+            <Text style={[styles.aCell, { width: "10%", fontWeight: 700 }]}>
+              Order
+            </Text>
+            <Text style={[styles.aCell, { width: "18%", fontWeight: 700 }]}>
+              Role
+            </Text>
+            <Text style={[styles.aCell, { width: "18%", fontWeight: 700 }]}>
+              Name
+            </Text>
+            <Text style={[styles.aCell, { width: "16%", fontWeight: 700 }]}>
+              Position
+            </Text>
+
+            {/* ✅ NEW */}
+            <Text style={[styles.aCell, { width: "18%", fontWeight: 700 }]}>
+              Signature
+            </Text>
+
+            <Text style={[styles.aCell, { width: "10%", fontWeight: 700 }]}>
+              Date
+            </Text>
+            <Text
+              style={[
+                styles.aCell,
+                { width: "10%", fontWeight: 700, borderRightWidth: 0 },
+              ]}
+            >
               Status
             </Text>
           </View>
 
           {approvals.map((a, idx) => (
             <View key={`${a.stepOrder}-${idx}`} style={styles.approvalsRow}>
-              <Text style={[styles.aCell, { width: "16%" }]}>{String(a.stepOrder)}</Text>
-              <Text style={[styles.aCell, { width: "22%" }]}>{a.stepRole}</Text>
-              <Text style={[styles.aCell, { width: "22%" }]}>{a.signerName || "—"}</Text>
-              <Text style={[styles.aCell, { width: "18%" }]}>{a.signerPosition || "—"}</Text>
-              <Text style={[styles.aCell, { width: "12%" }]}>{fmtDate(a.signedAt)}</Text>
-              <Text style={[styles.aCell, { width: "10%", borderRightWidth: 0 }]}>
+              <Text style={[styles.aCell, { width: "10%" }]}>
+                {String(a.stepOrder)}
+              </Text>
+              <Text style={[styles.aCell, { width: "18%" }]}>{a.stepRole}</Text>
+              <Text style={[styles.aCell, { width: "18%" }]}>
+                {a.signerName || "—"}
+              </Text>
+              <Text style={[styles.aCell, { width: "16%" }]}>
+                {a.signerPosition || "—"}
+              </Text>
+
+              {/* ✅ NEW signature column */}
+              <View style={[styles.aCell, { width: "18%" }]}>
+                <View style={styles.sigWrap}>
+                  {a.signatureDataUri ? (
+                    <Image style={styles.sigImg} src={a.signatureDataUri} />
+                  ) : a.signerName ? (
+                    <Text>{`Signed by: ${a.signerName}`}</Text>
+                  ) : (
+                    <Text>—</Text>
+                  )}
+                </View>
+              </View>
+
+              <Text style={[styles.aCell, { width: "10%" }]}>
+                {fmtDate(a.signedAt)}
+              </Text>
+              <Text
+                style={[styles.aCell, { width: "10%", borderRightWidth: 0 }]}
+              >
                 {a.status}
               </Text>
             </View>

@@ -19,6 +19,13 @@ const ALLOWED = new Set([
   "image/jpeg",
   "image/webp",
 ]);
+  const ALLOW_UPLOAD_STATUSES = new Set([
+  "DRAFT",
+  "RETURNED",
+  "SUBMITTED",
+  "IN_APPROVAL",
+]);
+
 
 // ✅ per your requirement: max 25 MB
 const MAX_SIZE = 25 * 1024 * 1024;
@@ -72,16 +79,17 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 
+
   // (optional safety) only allow attachments while draft
-  if (!(def.status === "DRAFT" || def.status === "RETURNED")) {
-    return NextResponse.json(
-      {
-        message: "Validation error",
-        detail: "Attachments only allowed for drafts",
-      },
-      { status: 400 },
-    );
-  }
+if (!ALLOW_UPLOAD_STATUSES.has(String(def.status))) {
+  return NextResponse.json(
+    {
+      message: "Validation error",
+      detail: `Attachments not allowed when status is ${def.status}`,
+    },
+    { status: 400 },
+  );
+}
 
   const form = await req.formData();
   const files = form.getAll("files").filter((f) => f instanceof File) as File[];

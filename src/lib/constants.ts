@@ -59,7 +59,7 @@ export const STATUS_COLORS: Record<DeferralStatus, string> = {
   IN_APPROVAL: "bg-amber-100 text-amber-900",
   REJECTED: "bg-red-300 text-red-900",
   APPROVED: "bg-green-100 text-green-900",
-  COMPLETED: "bg-emerald-100 text-emerald-900",
+  COMPLETED: "bg-green-400 text-emerald-900",
 };
 
 export const RISK_CATEGORIES = ["PEOPLE", "ENVIRONMENT", "FINANCIAL", "REPUTATION"] as const;

@@ -154,14 +154,14 @@ export default function NewDeferralPage() {
   const saveRisksNow = useCallback(
     async (silent?: boolean) => {
       if (!deferral) return;
-
+      if (!riskRowsRef.current || riskRowsRef.current.length === 0) return;
       setRiskSaving(true);
       try {
         const payload = {
           items: (riskRowsRef.current ?? []).map((r) => ({
             category: r.category,
-            severity: r.severity??"1",
-            likelihood: r.likelihood??"A",
+            severity: r.severity ?? "1",
+            likelihood: r.likelihood ?? "A",
             justification: r.justification ?? "",
           })),
         };
@@ -222,15 +222,9 @@ export default function NewDeferralPage() {
   const searchParams = useSearchParams();
   const draftId = (searchParams.get("draftId") ?? "").trim();
   const requestDate = useMemo(() => new Date().toLocaleDateString(), []);
-
-  async function createDraftIfNeeded() {
-    // Create a draft immediately on page open (code auto-generated on backend)
-    const created = await api<{ item: Deferral }>("/api/deferrals", {
-      method: "POST",
-      json: {}, // initiatorDepartment defaults to profile.department on backend
-    });
-    return created.item;
-  }
+  const canUpload =
+    deferral?.status === "DRAFT" || deferral?.status === "RETURNED";
+  const uploadInputId = `upload-${deferral?.id ?? "new"}`;
 
   async function loadAll() {
     setLoading(true);
@@ -323,9 +317,68 @@ export default function NewDeferralPage() {
     }
   }
 
+  const didInitRef = useRef(false);
+
   useEffect(() => {
-    loadAll();
+    // Prevent double-run in React Strict Mode (dev)
+    if (didInitRef.current) return;
+    didInitRef.current = true;
+
+    void (async () => {
+      setLoading(true);
+      try {
+        const p = await api<{ profile: Profile }>("/api/profile");
+        setProfile(p.profile);
+
+        // If URL already has a draftId -> load it
+        if (draftId) {
+          const existing = await api<{ item: Deferral }>(
+            `/api/deferrals/${draftId}`,
+          );
+          setDeferral(existing.item);
+          // ...hydrate state from existing.item...
+          return;
+        }
+
+        // Otherwise create EXACTLY ONCE
+        const created = await api<{ item: Deferral }>("/api/deferrals", {
+          method: "POST",
+          json: {},
+        });
+
+        const d = created.item;
+        setDeferral(d);
+
+        // IMPORTANT: replace URL (but DON'T cause another create)
+        router.replace(`/deferrals/new?draftId=${encodeURIComponent(d.id)}`);
+
+        // ...hydrate state from d...
+      } catch (e: any) {
+        toast.error(e?.message ?? "Failed to start a new deferral");
+      } finally {
+        setLoading(false);
+      }
+    })();
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 👈 run once only
+
+  useEffect(() => {
+    if (!draftId) return;
+    if (deferral?.id === draftId) return;
+
+    void (async () => {
+      setLoading(true);
+      try {
+        const existing = await api<{ item: Deferral }>(
+          `/api/deferrals/${draftId}`,
+        );
+        setDeferral(existing.item);
+        // hydrate...
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [draftId]);
 
   const pendingPatchRef = useRef<any>({});
@@ -433,6 +486,12 @@ export default function NewDeferralPage() {
       return;
     }
 
+    if (deferred.getTime() <= current.getTime()) {
+      toast.error("Validation error", {
+        description: "Deferred To (New LAFD) must be after Current LAFD.",
+      });
+      return;
+    }
     const max = addMonths(current, 6);
     if (deferred.getTime() > max.getTime()) {
       toast.error("Validation error", {
@@ -502,6 +561,7 @@ export default function NewDeferralPage() {
   }
 
   async function uploadAttachments(files: FileList | null) {
+    console.log("upload attachment");
     if (!deferral || !files || files.length === 0) return;
 
     const tooBig = Array.from(files).find((f) => f.size > 25 * 1024 * 1024);
@@ -519,11 +579,13 @@ export default function NewDeferralPage() {
       const res = await fetch(`/api/deferrals/${deferral.id}/attachments`, {
         method: "POST",
         body: form,
+        credentials: "include",
       });
       const json = await res.json().catch(() => null);
+
       if (!res.ok) {
-        toast.error(json?.message ?? "Upload failed", {
-          description: json?.detail ?? "Server error",
+        toast.error(`Upload failed (${res.status})`, {
+          description: json?.detail ?? json?.message ?? "Server error",
         });
         return;
       }
@@ -534,44 +596,69 @@ export default function NewDeferralPage() {
     }
   }
 
+  function defaultRiskRows(): RiskRow[] {
+    return [
+      {
+        category: "PEOPLE",
+        severity: 1,
+        likelihood: "A",
+        ramCell: "1A",
+        ramConsequenceLevel: "",
+        justification: "",
+      },
+      {
+        category: "ASSET",
+        severity: 1,
+        likelihood: "A",
+        ramCell: "1A",
+        ramConsequenceLevel: "",
+        justification: "",
+      },
+      {
+        category: "ENVIRONMENT",
+        severity: 1,
+        likelihood: "A",
+        ramCell: "1A",
+        ramConsequenceLevel: "",
+        justification: "",
+      },
+      {
+        category: "REPUTATION",
+        severity: 1,
+        likelihood: "A",
+        ramCell: "1A",
+        ramConsequenceLevel: "",
+        justification: "",
+      },
+    ];
+  }
+
   async function loadRisks() {
     if (!deferral) return;
     try {
       const res = await api<{ items: RiskRow[] }>(
         `/api/deferrals/${deferral.id}/risks`,
       );
-      if (res.items?.length) setRiskRows(res.items as any);
+      if (res.items?.length) {
+        setRiskRows(res.items as any);
+      } else {
+        // 👇 if server has none, show defaults locally
+        setRiskRows(defaultRiskRows());
+      }
     } catch {
-      // ignore (new draft may have none yet)
+      // 👇 if GET fails, still show defaults locally
+      setRiskRows(defaultRiskRows());
     }
   }
 
-  async function saveRisks() {
-    if (!deferral) return;
-    setRiskSaving(true);
-    try {
-      const payload = {
-        items: riskRows.map((r) => ({
-          category: r.category,
-          severity: r.severity,
-          likelihood: r.likelihood,
-          justification: r.justification ?? "",
-        })),
-      };
-
-      const res = await api<{ items: RiskRow[] }>(
-        `/api/deferrals/${deferral.id}/risks`,
-        { method: "PUT", json: payload },
-      );
-
-      setRiskRows((res.items ?? []) as any);
-      toast.success("Saved");
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to save risks");
-    } finally {
-      setRiskSaving(false);
-    }
+  function addDaysIso(dateIso: string, days: number) {
+    // dateIso is yyyy-mm-dd
+    const d = new Date(dateIso + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
   }
+
+  const deferredMin = lafdCurrent ? addDaysIso(lafdCurrent, 1) : undefined;
 
   // load attachments & risks after draft exists
   useEffect(() => {
@@ -582,9 +669,15 @@ export default function NewDeferralPage() {
   }, [deferral?.id]);
 
   useEffect(() => {
-    queuePatch({ safetyCriticality: "NO",taskCriticality: "NO" });
-    queueRisksSave();
-  }, [workOrderNo]);
+    if (!deferral) return;
+
+    // if you REALLY want to default these values, do it once per deferral
+    queuePatch({ safetyCriticality: "NO", taskCriticality: "NO" });
+
+    // only queue risks save after risks are loaded/seeded
+    if (riskRows.length > 0) queueRisksSave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deferral?.id, riskRows.length, workOrderNo]);
 
   if (loading) {
     return (
@@ -825,10 +918,18 @@ export default function NewDeferralPage() {
                       const v = e.target.value;
                       setLafdCurrent(v);
                       setLafdAddMonths(0);
-                      setLafdDeferredTo("");
+
+                      // If existing deferred date becomes invalid, clear it
+                      if (lafdDeferredTo && v) {
+                        const min = addDaysIso(v, 1);
+                        if (lafdDeferredTo < min) {
+                          setLafdDeferredTo("");
+                          queuePatch({ lafdEndDate: null });
+                        }
+                      }
+
                       queuePatch({
                         lafdStartDate: fromIsoDateInput(v),
-                        lafdEndDate: fromIsoDateInput(lafdDeferredTo),
                       });
                     }}
                   />
@@ -841,12 +942,28 @@ export default function NewDeferralPage() {
                   <Input
                     type="date"
                     value={lafdDeferredTo}
+                    min={deferredMin} // ✅ can’t pick <= current
+                    disabled={!lafdCurrent} // ✅ force choosing current first
                     onChange={(e) => {
                       const v = e.target.value;
+
+                      // Guard if user types an invalid date
+                      if (lafdCurrent) {
+                        const min = addDaysIso(lafdCurrent, 1);
+                        if (v && v < min) {
+                          setLafdDeferredTo("");
+                          queuePatch({ lafdEndDate: null });
+                          return;
+                        }
+                      }
+
                       setLafdDeferredTo(v);
                       queuePatch({ lafdEndDate: fromIsoDateInput(v) });
                     }}
                   />
+                  <div className="text-xs text-muted-foreground">
+                    Must be after Current LAFD.
+                  </div>
                 </div>
               </div>
 
@@ -961,13 +1078,13 @@ export default function NewDeferralPage() {
             </CardHeader>
 
             <CardContent className="space-y-4">
-              <div className="text-sm text-muted-foreground">
+              {/* <div className="text-sm text-muted-foreground">
                 Choose Severity + Likelihood per category. RAM cell and level
                 are computed on the server.
                 <br />
                 (Next: we’ll add a “View RAM Matrix” button that opens your RAM
                 image in a dialog.)
-              </div>
+              </div> */}
 
               <div className="grid gap-3">
                 {riskRows.map((r, idx) => (
@@ -1120,24 +1237,46 @@ export default function NewDeferralPage() {
                       PDF / PNG / JPG / WEBP — max 25MB each.
                     </div>
                   </div>
-
-                  <label className="inline-flex">
+                  <label
+                    htmlFor={uploadInputId}
+                    className="cursor-pointer"
+                    onClick={() => console.log("LABEL CLICK")}
+                  >
                     <input
+                      id={uploadInputId}
                       type="file"
                       multiple
-                      className="hidden"
+                      className="sr-only" // hide from screen readers
                       accept="application/pdf,image/png,image/jpeg,image/webp"
+                      disabled={!canUpload}
                       onChange={(e) => {
-                        void uploadAttachments(e.target.files);
-                        e.currentTarget.value = "";
+                        const fl = e.target.files;
+                        console.log("INPUT onChange fired", {
+                          filesCount: fl?.length ?? 0,
+                          hasDeferral: !!deferral,
+                          deferralId: deferral?.id,
+                        });
+
+                        // IMPORTANT: call upload first, then reset value
+                        void uploadAttachments(fl);
+                        e.target.value = "";
                       }}
                     />
-                    <Button asChild>
-                      <span>
+
+                    <Button asChild disabled={!canUpload}>
+                      <label htmlFor={uploadInputId} className="cursor-pointer">
                         <UploadCloud className="mr-2 h-4 w-4" />
                         Upload
-                      </span>
+                      </label>
                     </Button>
+
+                    {!canUpload && deferral && (
+                      <div className="text-xs text-muted-foreground">
+                        Upload is disabled because status is{" "}
+                        <b>{deferral.status}</b>. Only <b>DRAFT</b> or{" "}
+                        <b>RETURNED</b> can upload attachments.
+                      </div>
+                    )}
                   </label>
                 </div>
               </div>

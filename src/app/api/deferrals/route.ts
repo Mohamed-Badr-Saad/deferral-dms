@@ -138,9 +138,9 @@ function buildWhereClause(args: {
   }
 
   // applicant sees only theirs
-  if (profile.role === "ENGINEER_APPLICANT") {
-    clauses.push(eq(deferrals.initiatorUserId, profile.id));
-  }
+  // if (profile.role === "ENGINEER_APPLICANT") {
+  //   clauses.push(eq(deferrals.initiatorUserId, profile.id));
+  // }
 
   const dept = (department ?? "").trim();
   if (dept) clauses.push(eq(deferrals.initiatorDepartment, dept));

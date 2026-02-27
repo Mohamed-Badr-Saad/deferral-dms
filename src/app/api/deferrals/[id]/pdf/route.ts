@@ -1,7 +1,10 @@
+// src/app/deferral/[id]/pdf/route.ts (or src/app/api/deferrals/[id]/pdf/route.ts based on your app)
+// Keep your current path, just replace the file content.
+
 import { NextResponse } from "next/server";
 import React from "react";
 import { renderToBuffer } from "@react-pdf/renderer";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/src/db";
 import {
@@ -17,9 +20,32 @@ import {
   type PdfRiskRow,
   type PdfDeferral,
 } from "@/src/lib/pdf/DeferralPdf";
-import { canViewDeferral } from "@/src/lib/authz/deferralAccess";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+async function fetchAsDataUri(
+  req: Request,
+  url: string,
+): Promise<string | null> {
+  try {
+    if (!url) return null;
+
+    const origin = new URL(req.url).origin;
+    const absolute = url.startsWith("http") ? url : `${origin}${url}`;
+
+    const cookie = req.headers.get("cookie") ?? "";
+    const res = await fetch(absolute, {
+      headers: cookie ? { cookie } : undefined,
+    });
+    if (!res.ok) return null;
+
+    const contentType = res.headers.get("content-type") || "image/png";
+    const b64 = Buffer.from(await res.arrayBuffer()).toString("base64");
+    return `data:${contentType};base64,${b64}`;
+  } catch {
+    return null;
+  }
+}
 
 export async function GET(_req: Request, ctx: Ctx) {
   const profile = await getBusinessProfile();
@@ -40,31 +66,8 @@ export async function GET(_req: Request, ctx: Ctx) {
   const d = dRows[0];
   if (!d) return NextResponse.json({ message: "Not found" }, { status: 404 });
 
-  // ✅ permissions: initiator OR involved in approvals (assigned/signed)
-  const aMine = await db
-    .select({ id: deferralApprovals.id })
-    .from(deferralApprovals)
-    .where(
-      and(
-        eq(deferralApprovals.deferralId, deferralId),
-        or(
-          eq(deferralApprovals.assignedUserId, profile.id),
-          eq(deferralApprovals.signedByUserId, profile.id),
-        ),
-      ),
-    )
-    .limit(1);
-
-  const access = await canViewDeferral(deferralId, profile.id);
-  if (!access.ok) {
-    return NextResponse.json(
-      {
-        message:
-          access.reason === "not_found" ? "Not found" : "Permission denied",
-      },
-      { status: access.reason === "not_found" ? 404 : 403 },
-    );
-  }
+  // ✅ Allow ANY authenticated user to export/print any deferral
+  // (You asked: "I also want any one to be able to print any deferral")
 
   // Initiator user info
   const initiatorRows = await db
@@ -109,24 +112,42 @@ export async function GET(_req: Request, ctx: Ctx) {
   const posById = new Map(signedUsers.map((u) => [u.id, u.position]));
   const nameById = new Map(signedUsers.map((u) => [u.id, u.name]));
 
-  const approvals: PdfApprovalRow[] = approvalsDb
-    .sort((a: any, b: any) => Number(a.stepOrder) - Number(b.stepOrder))
-    .map((a: any) => ({
-      stepOrder: Number(a.stepOrder),
-      stepRole: String(a.stepRole),
-      status: String(a.status),
+  // Build approvals rows + signature fetch
+  const approvalsSorted = approvalsDb.sort(
+    (a: any, b: any) => Number(a.stepOrder) - Number(b.stepOrder),
+  );
 
-      signerName:
+  const approvals: PdfApprovalRow[] = await Promise.all(
+    approvalsSorted.map(async (a: any) => {
+      const signerName =
         String(a.signedByNameSnapshot || "") ||
-        (a.signedByUserId ? (nameById.get(a.signedByUserId) ?? "—") : "—"),
+        (a.signedByUserId ? (nameById.get(a.signedByUserId) ?? "—") : "—");
 
-      signerPosition: a.signedByUserId
+      const signerPosition = a.signedByUserId
         ? (posById.get(a.signedByUserId) ?? "—")
-        : "—",
+        : "—";
 
-      signedAt: a.signedAt ? new Date(a.signedAt) : null,
-      comment: String(a.comment ?? ""),
-    }));
+      const sigUrl = String(a.signatureUrlSnapshot ?? "");
+      const signatureDataUri = sigUrl
+        ? await fetchAsDataUri(_req, sigUrl)
+        : null;
+
+      return {
+        stepOrder: Number(a.stepOrder),
+        stepRole: String(a.stepRole),
+        status: String(a.status),
+
+        signerName,
+        signerPosition,
+
+        signedAt: a.signedAt ? new Date(a.signedAt) : null,
+        comment: String(a.comment ?? ""),
+
+        // ✅ NEW
+        signatureDataUri,
+      };
+    }),
+  );
 
   const deferral: PdfDeferral = {
     deferralCode: d.deferralCode,
@@ -155,7 +176,6 @@ export async function GET(_req: Request, ctx: Ctx) {
     mitigations: d.mitigations || "",
   };
 
-  // ✅ NO JSX here (avoids your parse error)
   const element = React.createElement(DeferralPdfDoc, {
     deferral,
     risks,
@@ -167,7 +187,8 @@ export async function GET(_req: Request, ctx: Ctx) {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${d.deferralCode}.pdf"`,
+      // ✅ inline makes browser print workflow nicer
+      "Content-Disposition": `inline; filename="${d.deferralCode}.pdf"`,
     },
   });
 }

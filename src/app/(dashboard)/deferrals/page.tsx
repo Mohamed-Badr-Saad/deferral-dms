@@ -192,7 +192,61 @@ export default function DeferralsPage() {
     };
   }, []);
 
+  const resetFilters = useCallback(() => {
+    setDraftScope("all");
+    setDraftDepartment("ALL");
+    setDraftStatus("ALL");
+    setDraftEquipmentTag("");
+    setDraftUpdatedFrom("");
+    setDraftUpdatedTo("");
+    setAppliedFilters(null);
+    setItems([]);
+    setErr(null);
+    setDraftDeferralCode("");
+    setDraftWorkOrderNo("");
+  }, []);
+
+  const fetchMatchedTotal = useCallback(
+    async (filters: {
+      scope: Scope;
+      department: string;
+      status: string;
+      deferralCode: string;
+      workOrderNo: string;
+      equipmentTag: string;
+      updatedFromISO: string;
+      updatedToISO: string;
+    }) => {
+      const p = new URLSearchParams();
+      p.set("mode", "counts");
+      p.set("scope", filters.scope);
+
+      if (filters.department) p.set("department", filters.department);
+      if (filters.status && filters.status !== "ALL")
+        p.set("status", filters.status);
+
+      if (filters.deferralCode) p.set("deferralCode", filters.deferralCode);
+      if (filters.workOrderNo) p.set("workOrderNo", filters.workOrderNo);
+      if (filters.equipmentTag) p.set("equipmentTag", filters.equipmentTag);
+
+      if (filters.updatedFromISO) p.set("updatedFrom", filters.updatedFromISO);
+      if (filters.updatedToISO) p.set("updatedTo", filters.updatedToISO);
+
+      const c = await api<CountsResponse>(`/api/deferrals?${p.toString()}`);
+      setMatchedTotal(c?.totalMatched ?? 0);
+    },
+    [],
+  );
+
   const applyFilters = useCallback(async () => {
+    if (
+      draftUpdatedFrom &&
+      draftUpdatedTo &&
+      draftUpdatedTo < draftUpdatedFrom
+    ) {
+      setErr("Updated To must be the same day or after Updated From.");
+      return;
+    }
     setErr(null);
 
     const dept = draftDepartment === "ALL" ? "" : draftDepartment;
@@ -235,6 +289,10 @@ export default function DeferralsPage() {
           p.set("updatedFrom", newApplied.updatedFromISO);
         if (newApplied.updatedToISO)
           p.set("updatedTo", newApplied.updatedToISO);
+        if (newApplied.deferralCode)
+          p.set("deferralCode", newApplied.deferralCode);
+        if (newApplied.workOrderNo)
+          p.set("workOrderNo", newApplied.workOrderNo);
         return p.toString();
       })();
 
@@ -255,6 +313,10 @@ export default function DeferralsPage() {
           p.set("updatedFrom", newApplied.updatedFromISO);
         if (newApplied.updatedToISO)
           p.set("updatedTo", newApplied.updatedToISO);
+        if (newApplied.deferralCode)
+          p.set("deferralCode", newApplied.deferralCode);
+        if (newApplied.workOrderNo)
+          p.set("workOrderNo", newApplied.workOrderNo);
         return p.toString();
       })();
 
@@ -275,28 +337,15 @@ export default function DeferralsPage() {
   }, [
     draftScope,
     draftDepartment,
-    draftDeferralCode,
-    draftWorkOrderNo,
     draftStatus,
     draftEquipmentTag,
     draftUpdatedFrom,
     draftUpdatedTo,
+    draftDeferralCode,
+    draftWorkOrderNo,
     makeUpdatedISO,
+    fetchMatchedTotal,
   ]);
-
-  const resetFilters = useCallback(() => {
-    setDraftScope("all");
-    setDraftDepartment("ALL");
-    setDraftStatus("ALL");
-    setDraftEquipmentTag("");
-    setDraftUpdatedFrom("");
-    setDraftUpdatedTo("");
-    setAppliedFilters(null);
-    setItems([]);
-    setErr(null);
-    setDraftDeferralCode("");
-    setDraftWorkOrderNo("");
-  }, []);
 
   const loadMore = useCallback(async () => {
     if (!appliedFilters) return;
@@ -337,38 +386,6 @@ export default function DeferralsPage() {
       setLoadingCounts(false);
     }
   }, []);
-
-  const fetchMatchedTotal = useCallback(
-    async (filters: {
-      scope: Scope;
-      department: string;
-      status: string;
-      deferralCode: string;
-      workOrderNo: string;
-      equipmentTag: string;
-      updatedFromISO: string;
-      updatedToISO: string;
-    }) => {
-      const p = new URLSearchParams();
-      p.set("mode", "counts");
-      p.set("scope", filters.scope);
-
-      if (filters.department) p.set("department", filters.department);
-      if (filters.status && filters.status !== "ALL")
-        p.set("status", filters.status);
-
-      if (filters.deferralCode) p.set("deferralCode", filters.deferralCode);
-      if (filters.workOrderNo) p.set("workOrderNo", filters.workOrderNo);
-      if (filters.equipmentTag) p.set("equipmentTag", filters.equipmentTag);
-
-      if (filters.updatedFromISO) p.set("updatedFrom", filters.updatedFromISO);
-      if (filters.updatedToISO) p.set("updatedTo", filters.updatedToISO);
-
-      const c = await api<CountsResponse>(`/api/deferrals?${p.toString()}`);
-      setMatchedTotal(c?.totalMatched ?? 0);
-    },
-    [],
-  );
 
   const refreshResults = useCallback(async () => {
     if (!appliedFilters) return;
@@ -474,6 +491,16 @@ export default function DeferralsPage() {
   }, [draftScope, draftStatus]);
 
   useEffect(() => {
+    if (
+      draftUpdatedFrom &&
+      draftUpdatedTo &&
+      draftUpdatedTo < draftUpdatedFrom
+    ) {
+      setDraftUpdatedTo("");
+    }
+  }, [draftUpdatedFrom, draftUpdatedTo]);
+
+  useEffect(() => {
     fetchGlobalCounts();
   }, [fetchGlobalCounts]);
 
@@ -524,16 +551,20 @@ export default function DeferralsPage() {
             {(
               [
                 "DRAFT",
-                "SUBMITTED",
-                "RETURNED",
                 "IN_APPROVAL",
+                "RETURNED",
                 "REJECTED",
                 "APPROVED",
                 "COMPLETED",
               ] as const
             ).map((s) => (
-              <Card key={s} className="rounded-2xl">
-                <CardHeader className="flex flex-row items-center justify-between">
+              <Card
+                key={s}
+                className={`rounded-2xl ${STATUS_COLORS[s]} rounded-tl-2xl rounded-tr-2xl`}
+              >
+                <CardHeader
+                  className={`flex flex-row items-center justify-between `}
+                >
                   <CardTitle className="text-sm text-muted-foreground">
                     {STATUS_LABELS[s]}
                   </CardTitle>
@@ -667,11 +698,13 @@ export default function DeferralsPage() {
             </div>
 
             <div className="space-y-1">
-              <div className="text-xs text-muted-foreground">Equipment tag</div>
+              <div className="text-xs text-muted-foreground">
+                Equipment Full Code
+              </div>
               <Input
                 value={draftEquipmentTag}
                 onChange={(e) => setDraftEquipmentTag(e.target.value)}
-                placeholder="e.g. TAG/0123"
+                placeholder="e.g. .../.../.../.../..."
               />
               <div className="text-[11px] text-muted-foreground">
                 Partial match (contains).
@@ -698,6 +731,7 @@ export default function DeferralsPage() {
               <Input
                 type="date"
                 value={draftUpdatedTo}
+                min={draftUpdatedFrom || undefined}
                 onChange={(e) => setDraftUpdatedTo(e.target.value)}
               />
               <div className="text-[11px] text-muted-foreground">

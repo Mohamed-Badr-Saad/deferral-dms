@@ -1504,7 +1504,9 @@ export default function DeferralDetailsPage() {
                           </div>
                         </div>
 
-                        <label className="inline-flex">
+                        <label
+                          className="inline-flex"
+                        >
                           <input
                             type="file"
                             multiple
@@ -1512,8 +1514,14 @@ export default function DeferralDetailsPage() {
                             accept="application/pdf,image/png,image/jpeg,image/webp"
                             disabled={!canEditDraft}
                             onChange={(e) => {
-                              void uploadAttachments(e.target.files);
-                              e.currentTarget.value = "";
+                              const fl = e.target.files;
+                              console.log("INPUT onChange fired", {
+                                filesCount: fl?.length ?? 0,
+                              });
+
+                              // IMPORTANT: call upload first, then reset value
+                              void uploadAttachments(fl);
+                              e.target.value = "";
                             }}
                           />
                           <Button asChild disabled={!canEditDraft}>
@@ -1582,7 +1590,6 @@ export default function DeferralDetailsPage() {
             </Card>
           ) : (
             <>
-
               <ApprovalTimeline deferralId={item.id} />
             </>
           )}
