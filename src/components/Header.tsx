@@ -15,9 +15,7 @@ export function Header() {
             <div className="text-sm font-semibold tracking-tight">
               Deferral Management System
             </div>
-            <div className="text-xs text-muted-foreground">
-              Deferrals • Approvals • Workflow
-            </div>
+
           </div>
         </div>
 

@@ -1191,16 +1191,17 @@ export default function DeferralDetailsPage() {
                         <Select
                           value={taskCriticality}
                           onValueChange={(v) => {
-                            const next = (v as any) ?? "NO";
+                            let next = (v as any) ?? "NO";
                             setTaskCriticality(next);
-                            queuePatch({ taskCriticality: next });
                             if (next === "YES") {
                               toast.warning("ORA required", {
                                 description:
-                                  "Task Criticality = YES → Work order should have an ORA, not a deferral.",
+                                "Task Criticality = YES → Work order should have an ORA, not a deferral.",
                               });
                               setTaskCriticality("NO");
+                              next = "NO";
                             }
+                            queuePatch({ taskCriticality: next });
                           }}
                           disabled={!canEditDraft}
                         >

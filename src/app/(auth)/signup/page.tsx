@@ -24,6 +24,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { Eye, EyeOff } from "lucide-react";
 
 const DEPARTMENTS = [
   "Electrical",
@@ -48,6 +49,7 @@ export default function SignupPage() {
   const [name, setName] = useState("");
   const [department, setDepartment] = useState("");
   const [position, setPosition] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const [deptOpen, setDeptOpen] = useState(false);
 
@@ -124,15 +126,32 @@ export default function SignupPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Min 8 characters"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                />
+
+                <div className="relative">
+                  <Input
+                    id="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    required
+                    className="pr-10"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
 

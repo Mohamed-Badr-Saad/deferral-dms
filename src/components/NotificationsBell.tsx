@@ -145,6 +145,14 @@ export function NotificationsBell() {
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
                         {n.body}
+                        <div className="text-xs text-muted-foreground truncate">
+                          {n.deferralCodeSnapshot
+                            ? `Deferral: ${n.deferralCodeSnapshot}`
+                            : ""}
+                          {n.equipmentTagSnapshot
+                            ? ` • Equipment: ${n.equipmentTagSnapshot}`
+                            : ""}
+                        </div>
                       </div>
                     </div>
 

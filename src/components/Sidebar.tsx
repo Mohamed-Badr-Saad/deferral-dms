@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/src/lib/nav";
 import { useProfile } from "@/src/hooks/useProfile";
 import { Separator } from "@/components/ui/separator";
+import Image from "next/image";
+import { IMAGES_BASE64_CODE } from "../lib/assets";
 
 function isActiveLink(
   currentPath: string,
@@ -42,15 +44,15 @@ export function Sidebar() {
         {/* Brand */}
         <div className="px-5 py-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20">
-              <div className="h-2.5 w-2.5 rounded-full bg-primary" />
-            </div>
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl ">
+            <Image src={IMAGES_BASE64_CODE.Rashid_Logo} alt="Rashid Logo" width={40 } height={30} className="absolute" />  
+          </div>
             <div>
               <div className="text-sm font-semibold tracking-tight">
                 Deferral DMS
               </div>
               <div className="mt-0.5 text-xs text-muted-foreground">
-                Industrial workflow system
+                Deferral Management System
               </div>
             </div>
           </div>

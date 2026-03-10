@@ -1,5 +1,4 @@
 // src/lib/pdf/DeferralPdf.tsx
-import React from "react";
 import {
   Document,
   Page,
@@ -8,6 +7,7 @@ import {
   StyleSheet,
   Image,
 } from "@react-pdf/renderer";
+import { IMAGES, IMAGES_BASE64_CODE } from "../assets";
 
 export type PdfDeferral = {
   deferralCode: string;
@@ -162,7 +162,46 @@ const styles = StyleSheet.create({
     height: 24,
     objectFit: "contain",
   },
+  // NEW: wrapper row
+  titleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#000",
+    paddingVertical: 6,
+  },
+  titleImageLeft: {
+    width: 50,
+    height: 40,
+    marginLeft: 6,
+  },
+  titleWrapper: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  titleImageRight: {
+    width: 50,
+    height: 40,
+    marginRight: 6,
+  },
 });
+
+const Roles = {
+  DEPARTMENT_HEAD: "Department Head",
+  RELIABILITY_ENGINEER: "Reliability Engineer",
+  RELIABILITY_GM: "Reliability GM",
+  RESPONSIBLE_GM: "Responsible GM",
+  PLANNING_ENGINEER: "Planning Engineer",
+  ENGINEER_APPLICANT: "Engineer (Applicant)",
+  SOD: "SOD",
+  DFGM: "DFGM",
+  TECHNICAL_AUTHORITY: "Technical Authority",
+  AD_HOC: "AD HOC",
+  PLANNING_SUPERVISOR_ENGINEER: "Planning Supervisor Engineer",
+  ADMIN: "Admin",
+};
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
@@ -186,10 +225,23 @@ export function DeferralPdfDoc(props: {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <View style={styles.titleRow}>
-          <Text style={styles.title}>
-            MAINTENANCE AND INSPECTION ACTIVITY DEFERRAL FORM
-          </Text>
+        <View style={styles.titleContainer}>
+          <Image
+            style={styles.titleImageLeft}
+            src={IMAGES_BASE64_CODE.Rashid_Logo}
+          />
+
+          {/* Center Title */}
+          <View style={styles.titleWrapper}>
+            <Text style={styles.title}>
+              MAINTENANCE AND INSPECTION ACTIVITY DEFERRAL FORM
+            </Text>
+          </View>
+          {/* Right Image */}
+          <Image
+            style={styles.titleImageRight}
+            src={IMAGES_BASE64_CODE.Burullus_Logo}
+          />
         </View>
 
         <View style={styles.spacer} />
@@ -330,13 +382,10 @@ export function DeferralPdfDoc(props: {
 
         <View style={styles.approvalsTable}>
           <View style={styles.approvalsHeader}>
-            <Text style={[styles.aCell, { width: "10%", fontWeight: 700 }]}>
-              Order
-            </Text>
-            <Text style={[styles.aCell, { width: "18%", fontWeight: 700 }]}>
+            <Text style={[styles.aCell, { width: "23%", fontWeight: 700 }]}>
               Role
             </Text>
-            <Text style={[styles.aCell, { width: "18%", fontWeight: 700 }]}>
+            <Text style={[styles.aCell, { width: "23%", fontWeight: 700 }]}>
               Name
             </Text>
             <Text style={[styles.aCell, { width: "16%", fontWeight: 700 }]}>
@@ -357,17 +406,14 @@ export function DeferralPdfDoc(props: {
                 { width: "10%", fontWeight: 700, borderRightWidth: 0 },
               ]}
             >
-              Status
+              Comment
             </Text>
           </View>
 
           {approvals.map((a, idx) => (
             <View key={`${a.stepOrder}-${idx}`} style={styles.approvalsRow}>
-              <Text style={[styles.aCell, { width: "10%" }]}>
-                {String(a.stepOrder)}
-              </Text>
-              <Text style={[styles.aCell, { width: "18%" }]}>{a.stepRole}</Text>
-              <Text style={[styles.aCell, { width: "18%" }]}>
+              <Text style={[styles.aCell, { width: "23%" }]}>{Roles[a.stepRole]}</Text>
+              <Text style={[styles.aCell, { width: "23%" }]}>
                 {a.signerName || "—"}
               </Text>
               <Text style={[styles.aCell, { width: "16%" }]}>
@@ -393,7 +439,7 @@ export function DeferralPdfDoc(props: {
               <Text
                 style={[styles.aCell, { width: "10%", borderRightWidth: 0 }]}
               >
-                {a.status}
+                {a.comment ? ` ${a.comment}` : "-"}
               </Text>
             </View>
           ))}

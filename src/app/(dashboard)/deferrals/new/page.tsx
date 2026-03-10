@@ -864,7 +864,7 @@ export default function NewDeferralPage() {
                   <Select
                     value={taskCriticality}
                     onValueChange={(v) => {
-                      const next = (v as any) ?? "NO";
+                      let next = (v as any) ?? "NO";
                       setTaskCriticality(next);
 
                       if (next === "YES") {
@@ -873,6 +873,7 @@ export default function NewDeferralPage() {
                             "Task Criticality = YES → Work order should have an ORA, not a deferral.",
                         });
                         setTaskCriticality("NO");
+                        next = "NO";
                       }
                       queuePatch({ taskCriticality: next });
                     }}

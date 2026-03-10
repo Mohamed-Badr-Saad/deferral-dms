@@ -95,7 +95,12 @@ export async function GET(_req: Request, ctx: Ctx) {
   const approvalsDb = await db
     .select()
     .from(deferralApprovals)
-    .where(eq(deferralApprovals.deferralId, deferralId));
+    .where(
+      and(
+        eq(deferralApprovals.deferralId, deferralId),
+        eq(deferralApprovals.cycle, d.approvalCycle), // ONLY LAST CYCLE
+      ),
+    );
 
   const signedIds = approvalsDb
     .map((a: any) => a.signedByUserId)

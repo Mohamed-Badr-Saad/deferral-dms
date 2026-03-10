@@ -231,5 +231,23 @@ export async function notifyUser(
     title,
     body,
     isRead: false,
+    deferralCodeSnapshot: deferralId
+      ? ((
+          await db
+            .select({ code: deferrals.deferralCode })
+            .from(deferrals)
+            .where(eq(deferrals.id, deferralId))
+            .limit(1)
+        )?.[0]?.code ?? null)
+      : null,
+    equipmentTagSnapshot: deferralId
+      ? ((
+          await db
+            .select({ equipmentTag: deferrals.equipmentTag })
+            .from(deferrals)
+            .where(eq(deferrals.id, deferralId))
+            .limit(1)
+        )?.[0]?.equipmentTag ?? null)
+      : null,
   } as any);
 }

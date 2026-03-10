@@ -9,6 +9,10 @@ export const notifications = pgTable("notifications", {
   title: text("title").notNull(),
   body: text("body").notNull().default(""),
 
+  // ✅ add snapshots
+  deferralCodeSnapshot: text("deferral_code_snapshot"),
+  equipmentTagSnapshot: text("equipment_tag_snapshot"),
+
   isRead: boolean("is_read").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   readAt: timestamp("read_at", { withTimezone: true }),

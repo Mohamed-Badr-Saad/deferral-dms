@@ -527,7 +527,7 @@ export default function DeferralsPage() {
       </div>
 
       {/* Stats: GLOBAL counts (never filtered) */}
-      <div className="rounded-2xl border bg-card">
+      {/* <div className="rounded-2xl border bg-card">
         <div className="p-5">
           <div className="flex items-center justify-between gap-3 mb-3">
             <div>
@@ -578,7 +578,7 @@ export default function DeferralsPage() {
             ))}
           </div>
         </div>
-      </div>
+      </div> */}
 
       {err && (
         <Card className="border-destructive">

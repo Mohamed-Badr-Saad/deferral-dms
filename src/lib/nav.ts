@@ -11,7 +11,6 @@ export const NAV_ITEMS: NavItem[] = [
 
   // Deferrals
   { label: "Deferrals", href: "/deferrals" },
-  { label: "Deferrals (History)", href: "/deferrals?scope=history" },
 
   // Approvals list (for reviewers/signers)
   { label: "Approvals", href: "/approvals", roles: ["DEPARTMENT_HEAD", "RELIABILITY_ENGINEER", "RELIABILITY_GM", "RESPONSIBLE_GM", "SOD", "DFGM", "TECHNICAL_AUTHORITY", "AD_HOC", "PLANNING_ENGINEER", "PLANNING_SUPERVISOR_ENGINEER", "ADMIN"] },

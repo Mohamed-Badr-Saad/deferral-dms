@@ -12,12 +12,13 @@ export async function GET() {
   const profile = await getBusinessProfile();
   if (!profile)
     return NextResponse.json({ message: "Permission denied" }, { status: 401 });
-
-  const baseWhere =
-    profile.role === "ENGINEER_APPLICANT"
-      ? eq(deferrals.initiatorUserId, profile.id)
-      : undefined;
-
+/******************** */
+  // const baseWhere =
+  //   profile.role === "ENGINEER_APPLICANT"
+  //     ? eq(deferrals.initiatorUserId, profile.id)
+  //     : undefined;
+  const baseWhere = undefined; // for now, show all counts to everyone — we don't have many deferrals and it's more useful to see overall stats on the dashboard
+/*********************************** */
   async function countFor(statuses: readonly string[]) {
     const where = baseWhere
       ? and(baseWhere as any, inArray(deferrals.status, statuses as any))

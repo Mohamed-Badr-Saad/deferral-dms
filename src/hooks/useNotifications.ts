@@ -11,6 +11,9 @@ export type NotificationItem = {
   isRead: boolean;
   createdAt: string;
   readAt: string | null;
+  // ✅ include snapshots in type
+  deferralCodeSnapshot: string | null;
+  equipmentTagSnapshot: string | null;
 };
 
 type ApiRes = {

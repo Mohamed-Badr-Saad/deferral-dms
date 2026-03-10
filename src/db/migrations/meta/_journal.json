@@ -78,6 +78,13 @@
       "when": 1771356098319,
       "tag": "0010_special_firestar",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1772223111679,
+      "tag": "0011_fuzzy_alice",
+      "breakpoints": true
     }
   ]
 }

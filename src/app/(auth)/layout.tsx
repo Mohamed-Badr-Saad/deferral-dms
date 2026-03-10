@@ -1,3 +1,6 @@
+import { IMAGES, IMAGES_BASE64_CODE } from "@/src/lib/assets";
+import Image from "next/image";
+
 export default function AuthLayout({
   children,
 }: {
@@ -16,10 +19,28 @@ export default function AuthLayout({
         <div className="w-full max-w-md">
           {/* Brand header */}
           <div className="mb-6 text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border bg-background shadow-sm">
-              <span className="text-sm font-semibold text-muted-foreground">
-                DMS
-              </span>
+            <div className=" mb-4 flex items-center justify-center gap-4">
+              {/* <Image
+                src={IMAGES.Burullus_Logo}
+                alt="Burullus Logo"
+                width={48}
+                height={48}
+                className="rounded-2xl"
+              /> */}
+              <Image
+                src={IMAGES_BASE64_CODE.Rashid_Logo}
+                alt="SHELL Logo"
+                width={82}
+                height={82}
+                className="rounded-2xl"
+              />
+              <Image
+                src={IMAGES_BASE64_CODE.SHELL_JV}
+                alt="SHELL JV Logo"
+                width={90}
+                height={90}
+                className="rounded-2xl"
+              />
             </div>
             <h1 className="text-xl font-semibold tracking-tight">
               Deferral Management System
