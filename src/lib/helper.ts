@@ -4,7 +4,7 @@ function addMonths(d: Date, months: number) {
   return x;
 }
 
-function validateLafdWindow(lafdStart: Date | null, lafdEnd: Date | null) {
+export function validateLafdWindow(lafdStart: Date | null, lafdEnd: Date | null) {
   if (!lafdStart || !lafdEnd) return null;
 
   const max = addMonths(lafdStart, 6);
@@ -16,3 +16,11 @@ function validateLafdWindow(lafdStart: Date | null, lafdEnd: Date | null) {
   }
   return null;
 }
+
+
+  export function addDaysIso(dateIso: string, days: number) {
+    // dateIso is yyyy-mm-dd
+    const d = new Date(dateIso + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  }

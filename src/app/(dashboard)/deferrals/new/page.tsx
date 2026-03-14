@@ -21,6 +21,7 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { UploadCloud, Save, ArrowRight } from "lucide-react";
+import { addDaysIso } from "@/src/lib/helper";
 
 type Deferral = {
   id: string;
@@ -211,6 +212,7 @@ export default function NewDeferralPage() {
   );
   const [taskCriticality, setTaskCriticality] = useState<"YES" | "NO">("NO");
 
+  const [originalLafd, setOriginalLafd] = useState<string>("");
   const [lafdCurrent, setLafdCurrent] = useState<string>(""); // yyyy-mm-dd
   const [lafdDeferredTo, setLafdDeferredTo] = useState<string>(""); // yyyy-mm-dd
   const [lafdAddMonths, setLafdAddMonths] = useState<number>(0);
@@ -266,6 +268,7 @@ export default function NewDeferralPage() {
         (String(d.taskCriticality || "NO").toUpperCase() as any) ?? "NO",
       );
 
+      setOriginalLafd(toIsoDateInput((d as any).originalLafd));
       setLafdCurrent(toIsoDateInput(d.lafdStartDate));
       setLafdDeferredTo(toIsoDateInput(d.lafdEndDate));
       setLafdAddMonths(0);
@@ -526,6 +529,7 @@ export default function NewDeferralPage() {
     }
     setLafdDeferredTo(next.toISOString().slice(0, 10));
     queuePatch({
+      originalLafd: fromIsoDateInput(originalLafd),
       lafdStartDate: fromIsoDateInput(lafdCurrent),
       lafdEndDate: fromIsoDateInput(next.toISOString().slice(0, 10)),
     });
@@ -651,12 +655,7 @@ export default function NewDeferralPage() {
     }
   }
 
-  function addDaysIso(dateIso: string, days: number) {
-    // dateIso is yyyy-mm-dd
-    const d = new Date(dateIso + "T00:00:00Z");
-    d.setUTCDate(d.getUTCDate() + days);
-    return d.toISOString().slice(0, 10);
-  }
+
 
   const deferredMin = lafdCurrent ? addDaysIso(lafdCurrent, 1) : undefined;
 
@@ -909,7 +908,24 @@ export default function NewDeferralPage() {
               </Button>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-1">
+                  <div className="text-sm font-medium">Original LAFD</div>
+                  <Input
+                    type="date"
+                    value={originalLafd}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setOriginalLafd(v);
+                      queuePatch({
+                        originalLafd: fromIsoDateInput(v),
+                      });
+                    }}
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    The original LAFD before any deferral.
+                  </div>
+                </div>
                 <div className="space-y-1">
                   <div className="text-sm font-medium">Current LAFD</div>
                   <Input
@@ -944,6 +960,13 @@ export default function NewDeferralPage() {
                     type="date"
                     value={lafdDeferredTo}
                     min={deferredMin} // ✅ can’t pick <= current
+                    max={(() => {
+                      const base = lafdCurrent;
+                      if (!base) return undefined;
+                      const d = new Date(base + "T00:00:00.000Z");
+                      d.setMonth(d.getMonth() + 6);
+                      return d.toISOString().slice(0, 10);
+                    })()}
                     disabled={!lafdCurrent} // ✅ force choosing current first
                     onChange={(e) => {
                       const v = e.target.value;
@@ -962,9 +985,6 @@ export default function NewDeferralPage() {
                       queuePatch({ lafdEndDate: fromIsoDateInput(v) });
                     }}
                   />
-                  <div className="text-xs text-muted-foreground">
-                    Must be after Current LAFD.
-                  </div>
                 </div>
               </div>
 

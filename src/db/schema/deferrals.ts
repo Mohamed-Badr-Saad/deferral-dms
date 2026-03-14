@@ -1,4 +1,11 @@
-import { pgTable, uuid, text, timestamp, boolean, integer } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  boolean,
+  integer,
+} from "drizzle-orm/pg-core";
 import { deferralStatusEnum } from "./enums";
 
 export const deferrals = pgTable("deferrals", {
@@ -18,6 +25,7 @@ export const deferrals = pgTable("deferrals", {
   safetyCriticality: text("safety_criticality").notNull().default(""),
 
   // LAFD dates (we’ll refine types later if needed)
+  originalLafd: timestamp("original_lafd", { withTimezone: true }),
   lafdStartDate: timestamp("lafd_start_date", { withTimezone: true }),
   lafdEndDate: timestamp("lafd_end_date", { withTimezone: true }),
 
@@ -35,14 +43,19 @@ export const deferrals = pgTable("deferrals", {
   mitigations: text("mitigations").notNull().default(""),
 
   // Reliability GM decision flags
-  requiresTechnicalAuthority: boolean("requires_technical_authority").notNull().default(false),
+  requiresTechnicalAuthority: boolean("requires_technical_authority")
+    .notNull()
+    .default(false),
   requiresAdHoc: boolean("requires_ad_hoc").notNull().default(false),
 
   status: deferralStatusEnum("status").notNull().default("DRAFT"),
 
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 
   // ✅ tracks current approvals generation (0 before first submit, then 1,2,3..)
   approvalCycle: integer("approval_cycle").notNull().default(0),

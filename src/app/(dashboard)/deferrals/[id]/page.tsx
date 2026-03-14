@@ -27,6 +27,7 @@ import { SubmitDeferralDialog } from "@/src/components/deferral/SubmitDeferralDi
 import { UploadCloud, Save } from "lucide-react";
 import { WorkOrderHistoryTab } from "@/src/components/deferral/WorkOrderHistoryTab";
 import { ApprovalStatus } from "@/src/components/deferral/GmDecisionPanel";
+import { addDaysIso } from "@/src/lib/helper";
 type Deferral = {
   id: string;
   deferralCode: string;
@@ -42,6 +43,7 @@ type Deferral = {
   taskCriticality: string; // YES/NO
   safetyCriticality: string; // YES/NO
 
+  originalLafd: string | null;
   lafdStartDate: string | null;
   lafdEndDate: string | null;
 
@@ -200,7 +202,7 @@ export default function DeferralDetailsPage() {
     "NO",
   );
   const [taskCriticality, setTaskCriticality] = useState<"YES" | "NO">("NO");
-
+  const [originalLafd, setOriginalLafd] = useState<string>("");
   const [lafdCurrent, setLafdCurrent] = useState<string>(""); // yyyy-mm-dd
   const [lafdDeferredTo, setLafdDeferredTo] = useState<string>(""); // yyyy-mm-dd
   const [lafdAddMonths, setLafdAddMonths] = useState<number>(0);
@@ -327,6 +329,7 @@ export default function DeferralDetailsPage() {
       ((d.taskCriticality || "NO").toUpperCase() as any) ?? "NO",
     );
 
+    setOriginalLafd(toIsoDateInput((d as any).originalLafd ?? d.lafdStartDate));
     setLafdCurrent(toIsoDateInput(d.lafdStartDate));
     setLafdDeferredTo(toIsoDateInput(d.lafdEndDate));
     setLafdAddMonths(0);
@@ -336,6 +339,8 @@ export default function DeferralDetailsPage() {
     setConsequence(d.consequence ?? "");
     setMitigations(d.mitigations ?? "");
   }, []);
+
+  const deferredMin = lafdCurrent ? addDaysIso(lafdCurrent, 1) : undefined;
 
   const load = useCallback(async () => {
     if (!deferralId) return;
@@ -655,6 +660,7 @@ export default function DeferralDetailsPage() {
     setLafdDeferredTo(next.toISOString().slice(0, 10));
     // queue patch
     queuePatch({
+      originalLafd: fromIsoDateInput(originalLafd),
       lafdStartDate: fromIsoDateInput(lafdCurrent),
       lafdEndDate: fromIsoDateInput(next.toISOString().slice(0, 10)),
     });
@@ -854,8 +860,8 @@ export default function DeferralDetailsPage() {
                 </div>
 
                 <Separator />
-
-                <div className="grid gap-4 md:grid-cols-3">
+                {/*criticality */}
+                <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <div className="text-xs text-muted-foreground">
                       Task Criticality
@@ -872,13 +878,35 @@ export default function DeferralDetailsPage() {
                       {item.safetyCriticality || "—"}
                     </div>
                   </div>
+                </div>
+                {/**LAFD dates */}
+                <Separator />
+                <div className="grid gap-4 md:grid-cols-4">
                   <div>
-                    <div className="text-xs text-muted-foreground">LAFD</div>
+                    <div className="text-xs text-muted-foreground">
+                      Original LAFD
+                    </div>
+                    <div className="font-medium">
+                      {item.originalLafd
+                        ? new Date(item.originalLafd).toLocaleDateString()
+                        : "—"}{" "}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">
+                      Current LAFD
+                    </div>
                     <div className="font-medium">
                       {item.lafdStartDate
                         ? new Date(item.lafdStartDate).toLocaleDateString()
                         : "—"}{" "}
-                      →{" "}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">
+                      New LAFD
+                    </div>
+                    <div className="font-medium">
                       {item.lafdEndDate
                         ? new Date(item.lafdEndDate).toLocaleDateString()
                         : "—"}
@@ -1196,7 +1224,7 @@ export default function DeferralDetailsPage() {
                             if (next === "YES") {
                               toast.warning("ORA required", {
                                 description:
-                                "Task Criticality = YES → Work order should have an ORA, not a deferral.",
+                                  "Task Criticality = YES → Work order should have an ORA, not a deferral.",
                               });
                               setTaskCriticality("NO");
                               next = "NO";
@@ -1219,7 +1247,24 @@ export default function DeferralDetailsPage() {
 
                   {/* DATES */}
                   <TabsContent value="dates" className="mt-4 space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium">Original LAFD</div>
+                        <Input
+                          type="date"
+                          value={originalLafd}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setOriginalLafd(v);
+
+                            queuePatch({
+                              originalLafd: fromIsoDateInput(v),
+                            });
+                          }}
+                          disabled={!canEditDraft}
+                        />
+                      </div>
+
                       <div className="space-y-1">
                         <div className="text-sm font-medium">Current LAFD</div>
                         <Input
@@ -1246,6 +1291,14 @@ export default function DeferralDetailsPage() {
                         <Input
                           type="date"
                           value={lafdDeferredTo}
+                          min={deferredMin} // ✅ can’t pick <= current
+                          max={(() => {
+                            const base = lafdCurrent;
+                            if (!base) return undefined;
+                            const d = new Date(base + "T00:00:00.000Z");
+                            d.setMonth(d.getMonth() + 6);
+                            return d.toISOString().slice(0, 10);
+                          })()}
                           onChange={(e) => {
                             const v = e.target.value;
                             setLafdDeferredTo(v);
@@ -1505,9 +1558,7 @@ export default function DeferralDetailsPage() {
                           </div>
                         </div>
 
-                        <label
-                          className="inline-flex"
-                        >
+                        <label className="inline-flex">
                           <input
                             type="file"
                             multiple

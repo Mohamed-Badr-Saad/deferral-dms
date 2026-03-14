@@ -1,22 +1,10 @@
-// src/app/api/deferrals/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { randomUUID } from "crypto";
 import { db } from "@/src/db";
-import { deferrals } from "@/src/db/schema";
+import { deferrals, workOrderDeferrals } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
-import {
-  and,
-  desc,
-  eq,
-  gte,
-  ilike,
-  inArray,
-  lt,
-  lte,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import { computeRamCell, computeRamConsequence } from "@/src/lib/constants";
 
 const ACTIVE_STATUSES = [
@@ -25,6 +13,7 @@ const ACTIVE_STATUSES = [
   "IN_APPROVAL",
   "RETURNED",
 ] as const;
+
 const HISTORY_STATUSES = ["COMPLETED", "APPROVED", "REJECTED"] as const;
 const ALL_STATUSES = [...ACTIVE_STATUSES, ...HISTORY_STATUSES] as const;
 
@@ -43,6 +32,7 @@ const CreateDeferralSchema = z.object({
   safetyCriticality: z.string().optional().default(""),
   taskCriticality: z.string().optional().default(""),
 
+  originalLafd: zNullableDateString.default(null),
   lafdStartDate: zNullableDateString.default(null),
   lafdEndDate: zNullableDateString.default(null),
 
@@ -52,7 +42,6 @@ const CreateDeferralSchema = z.object({
   mitigations: z.string().optional().default(""),
 
   riskCategory: z.string().optional().default(""),
-
   severity: z.coerce.number().int().min(1).max(5).default(1),
   likelihood: z.string().optional().default("A"),
 });
@@ -72,29 +61,9 @@ const GetQuerySchema = z.object({
   updatedTo: z.string().datetime().optional(),
 
   offset: z.coerce.number().int().min(0).optional().default(0),
-
-  // no max cap, but still required for paging
   pageSize: z.coerce.number().int().min(1).optional().default(80),
+  deferralRank: z.coerce.number().int().min(1).max(3).optional(),
 });
-
-function makeDeferralCode() {
-  const s = Math.random().toString(36).slice(2, 8).toUpperCase();
-  return `WDDM-N-${s}`;
-}
-
-async function generateUniqueDeferralCode() {
-  for (let i = 0; i < 10; i++) {
-    const code = makeDeferralCode();
-    const exists = await db
-      .select({ id: deferrals.id })
-      .from(deferrals)
-      .where(eq(deferrals.deferralCode, code))
-      .limit(1);
-
-    if (!exists[0]) return code;
-  }
-  return `WDDM-N-${Date.now().toString().slice(-6)}`;
-}
 
 function scopeStatuses(scope: "active" | "history" | "all") {
   if (scope === "active") return ACTIVE_STATUSES as unknown as string[];
@@ -105,19 +74,16 @@ function scopeStatuses(scope: "active" | "history" | "all") {
 function buildWhereClause(args: {
   profile: any;
   scope: "active" | "history" | "all";
-
   department: string;
   status?: string;
-
   deferralCode: string;
   workOrderNo: string;
   equipmentTag: string;
-
   updatedFrom?: string;
   updatedTo?: string;
+  deferralRank?: 1 | 2 | 3;
 }) {
   const {
-    profile,
     scope,
     department,
     status,
@@ -126,21 +92,13 @@ function buildWhereClause(args: {
     equipmentTag,
     updatedFrom,
     updatedTo,
+    deferralRank,
   } = args;
 
   const clauses: any[] = [];
 
-  // scope + optional single-status override
-  if (status) {
-    clauses.push(eq(deferrals.status, status as any));
-  } else {
-    clauses.push(inArray(deferrals.status, scopeStatuses(scope) as any));
-  }
-
-  // applicant sees only theirs
-  // if (profile.role === "ENGINEER_APPLICANT") {
-  //   clauses.push(eq(deferrals.initiatorUserId, profile.id));
-  // }
+  if (status) clauses.push(eq(deferrals.status, status as any));
+  else clauses.push(inArray(deferrals.status, scopeStatuses(scope) as any));
 
   const dept = (department ?? "").trim();
   if (dept) clauses.push(eq(deferrals.initiatorDepartment, dept));
@@ -154,6 +112,9 @@ function buildWhereClause(args: {
   const tag = (equipmentTag ?? "").trim();
   if (tag) clauses.push(ilike(deferrals.equipmentTag, `%${tag}%`));
 
+  if (deferralRank) {
+    clauses.push(eq(workOrderDeferrals.deferralNumber, deferralRank));
+  }
   if (updatedFrom)
     clauses.push(gte(deferrals.updatedAt, new Date(updatedFrom)));
   if (updatedTo) clauses.push(lte(deferrals.updatedAt, new Date(updatedTo)));
@@ -161,6 +122,76 @@ function buildWhereClause(args: {
   return clauses.length ? and(...clauses) : undefined;
 }
 
+function addMonthsSafe(date: Date, months: number) {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
+
+function validateLafdWindow(
+  originalLafd: Date | null,
+  currentLafd: Date | null,
+  newLafd: Date | null,
+) {
+  const base = currentLafd ?? originalLafd;
+  if (!base || !newLafd) return null;
+
+  if (newLafd.getTime() <= base.getTime()) {
+    return "Deferred To (New LAFD) must be greater than Current LAFD.";
+  }
+
+  const max = addMonthsSafe(base, 6);
+  if (newLafd.getTime() > max.getTime()) {
+    return "Deferred To (New LAFD) cannot be more than 6 months from Current LAFD.";
+  }
+
+  return null;
+}
+
+function departmentHint(department: string) {
+  const cleaned = (department ?? "").toUpperCase().replace(/[^A-Z0-9]+/g, "");
+
+  return (cleaned || "GEN").slice(0, 4);
+}
+
+function timestampHint(date = new Date()) {
+  const yyyy = date.getFullYear().toString();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mi = String(date.getMinutes()).padStart(2, "0");
+  const ss = String(date.getSeconds()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}${hh}${mi}${ss}`;
+}
+function yearHint(date = new Date()) {
+  return String(date.getFullYear());
+}
+function makeDeferralCode(department: string) {
+  const dept = departmentHint(department);
+  const year = yearHint();
+  const num = String(Math.floor(Math.random() * 10000)).padStart(4, "0");
+  return `WDDM-${dept}-${year}-${num}`;
+}
+
+async function generateUniqueDeferralCode(department: string) {
+  const dept = departmentHint(department);
+  const year = yearHint();
+
+  for (let i = 0; i < 30; i++) {
+    const code = makeDeferralCode(department);
+
+    const exists = await db
+      .select({ id: deferrals.id })
+      .from(deferrals)
+      .where(eq(deferrals.deferralCode, code))
+      .limit(1);
+
+    if (!exists[0]) return code;
+  }
+
+  const fallback = `${Date.now()}`.slice(-6);
+  return `WDDM-${dept}-${year}-${fallback}`;
+}
 
 export async function GET(req: Request) {
   const profile = await getBusinessProfile();
@@ -185,8 +216,8 @@ export async function GET(req: Request) {
     updatedTo: url.searchParams.get("updatedTo") ?? undefined,
 
     offset: url.searchParams.get("offset") ?? undefined,
-
     pageSize: url.searchParams.get("pageSize") ?? undefined,
+    deferralRank: url.searchParams.get("deferralRank") ?? undefined,
   });
 
   if (!parsed.success) {
@@ -204,6 +235,7 @@ export async function GET(req: Request) {
     deferralCode,
     workOrderNo,
     equipmentTag,
+    deferralRank,
     updatedFrom,
     updatedTo,
     offset,
@@ -218,40 +250,69 @@ export async function GET(req: Request) {
     deferralCode,
     workOrderNo,
     equipmentTag,
+    deferralRank,
     updatedFrom,
     updatedTo,
   });
 
   if (mode === "counts") {
-    // 1️⃣ Group by status (what you already have)
     const rows = await db
       .select({
         status: deferrals.status,
         count: sql<number>`count(*)`.mapWith(Number),
       })
       .from(deferrals)
+      .leftJoin(
+        workOrderDeferrals,
+        eq(workOrderDeferrals.deferralId, deferrals.id),
+      )
       .where(baseWhere as any)
       .groupBy(deferrals.status);
 
     const byStatus: Record<string, number> = {};
     for (const s of ALL_STATUSES) byStatus[s] = 0;
-    for (const r of rows) {
-      byStatus[String(r.status)] = Number(r.count ?? 0);
-    }
+    for (const r of rows) byStatus[String(r.status)] = Number(r.count ?? 0);
 
-    // 2️⃣ NEW: total matched (full filtered count)
     const totalRow = await db
-      .select({
-        count: sql<number>`count(*)`.mapWith(Number),
-      })
+      .select({ count: sql<number>`count(*)`.mapWith(Number) })
       .from(deferrals)
+      .leftJoin(
+        workOrderDeferrals,
+        eq(workOrderDeferrals.deferralId, deferrals.id),
+      )
       .where(baseWhere as any);
 
     const totalMatched = Number(totalRow?.[0]?.count ?? 0);
 
+    const rankRows = await db
+      .select({
+        deferralNumber: workOrderDeferrals.deferralNumber,
+        count: sql<number>`count(*)`.mapWith(Number),
+      })
+      .from(deferrals)
+      .leftJoin(
+        workOrderDeferrals,
+        eq(workOrderDeferrals.deferralId, deferrals.id),
+      )
+      .where(baseWhere as any)
+      .groupBy(workOrderDeferrals.deferralNumber);
+
+    const byDeferralRank = {
+      first: 0,
+      second: 0,
+      third: 0,
+    };
+
+    for (const r of rankRows) {
+      if (r.deferralNumber === 1) byDeferralRank.first = Number(r.count ?? 0);
+      if (r.deferralNumber === 2) byDeferralRank.second = Number(r.count ?? 0);
+      if (r.deferralNumber === 3) byDeferralRank.third = Number(r.count ?? 0);
+    }
+
     return NextResponse.json(
       {
         byStatus,
+        byDeferralRank,
         totals: {
           active: ACTIVE_STATUSES.reduce(
             (sum, s) => sum + (byStatus[s] ?? 0),
@@ -265,30 +326,36 @@ export async function GET(req: Request) {
             ACTIVE_STATUSES.reduce((sum, s) => sum + (byStatus[s] ?? 0), 0) +
             HISTORY_STATUSES.reduce((sum, s) => sum + (byStatus[s] ?? 0), 0),
         },
-
-        totalMatched, // ✅ THIS is what your frontend needs
+        totalMatched,
       },
       { status: 200 },
     );
   }
 
   const rows = await db
-  .select()
-  .from(deferrals)
-  .where(baseWhere as any)
-  .orderBy(desc(deferrals.updatedAt), desc(deferrals.id))
-  .limit(pageSize)
-  .offset(offset);
+    .select({
+      id: deferrals.id,
+      deferralCode: deferrals.deferralCode,
+      initiatorDepartment: deferrals.initiatorDepartment,
+      status: deferrals.status,
+      createdAt: deferrals.createdAt,
+      updatedAt: deferrals.updatedAt,
+      equipmentTag: deferrals.equipmentTag,
+      deferralNumber: workOrderDeferrals.deferralNumber,
+    })
+    .from(deferrals)
+    .leftJoin(
+      workOrderDeferrals,
+      eq(workOrderDeferrals.deferralId, deferrals.id),
+    )
+    .where(baseWhere as any)
+    .orderBy(desc(deferrals.updatedAt), desc(deferrals.id))
+    .limit(pageSize)
+    .offset(offset);
 
-const nextOffset = rows.length === pageSize ? offset + pageSize : null;
+  const nextOffset = rows.length === pageSize ? offset + pageSize : null;
 
-return NextResponse.json(
-  {
-    items: rows,
-    nextOffset,
-  },
-  { status: 200 },
-);
+  return NextResponse.json({ items: rows, nextOffset }, { status: 200 });
 }
 
 export async function POST(req: Request) {
@@ -303,6 +370,7 @@ export async function POST(req: Request) {
 
   const body = await req.json();
   const parsed = CreateDeferralSchema.safeParse(body);
+
   if (!parsed.success) {
     return NextResponse.json(
       {
@@ -324,9 +392,26 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         message: "Validation error",
-        detail:
-          "initiatorDepartment is required (or profile.department must exist).",
+        detail: "initiatorDepartment is required.",
       },
+      { status: 400 },
+    );
+  }
+
+  const originalLafd = parsed.data.originalLafd
+    ? new Date(parsed.data.originalLafd)
+    : null;
+  const lafdStartDate = parsed.data.lafdStartDate
+    ? new Date(parsed.data.lafdStartDate)
+    : null;
+  const lafdEndDate = parsed.data.lafdEndDate
+    ? new Date(parsed.data.lafdEndDate)
+    : null;
+
+  const lafdErr = validateLafdWindow(originalLafd, lafdStartDate, lafdEndDate);
+  if (lafdErr) {
+    return NextResponse.json(
+      { message: "Validation error", detail: lafdErr },
       { status: 400 },
     );
   }
@@ -338,8 +423,7 @@ export async function POST(req: Request) {
 
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      const code =
-        attempt === 0 ? await generateUniqueDeferralCode() : makeDeferralCode();
+      const code = await generateUniqueDeferralCode(initiatorDepartment);
 
       await db.insert(deferrals).values({
         id,
@@ -354,12 +438,9 @@ export async function POST(req: Request) {
         safetyCriticality: parsed.data.safetyCriticality,
         taskCriticality: parsed.data.taskCriticality,
 
-        lafdStartDate: parsed.data.lafdStartDate
-          ? new Date(parsed.data.lafdStartDate)
-          : null,
-        lafdEndDate: parsed.data.lafdEndDate
-          ? new Date(parsed.data.lafdEndDate)
-          : null,
+        originalLafd,
+        lafdStartDate,
+        lafdEndDate,
 
         description: parsed.data.description,
         justification: parsed.data.justification,
@@ -369,13 +450,11 @@ export async function POST(req: Request) {
         riskCategory: parsed.data.riskCategory,
         severity,
         likelihood,
-
         ramCell: computeRamCell(severity, likelihood),
         ramConsequenceLevel: computeRamConsequence(severity, likelihood),
 
         requiresTechnicalAuthority: false,
         requiresAdHoc: false,
-
         status: "DRAFT",
         updatedAt: new Date(),
       } as any);

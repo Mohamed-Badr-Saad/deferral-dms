@@ -12,10 +12,14 @@ import { STATUS_LABELS, STATUS_COLORS } from "@/src/lib/constants";
 
 type CountsResponse = {
   byStatus: Record<string, number>;
+  byDeferralRank?: {
+    first: number;
+    second: number;
+    third: number;
+  };
   totals: { active: number; history: number; all: number };
   totalMatched: number;
 };
-
 
 type Deferral = {
   id: string;
@@ -25,6 +29,7 @@ type Deferral = {
   createdAt: string;
   updatedAt: string;
   equipmentTag?: string | null;
+  deferralNumber?: number | null;
 };
 
 type ItemsResponse = {
@@ -161,6 +166,52 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+          <div className="grid gap-3 md:grid-cols-3 mt-4">
+            <Card className="rounded-2xl">
+              <CardHeader>
+                <CardTitle className="text-sm text-muted-foreground">
+                  First deferrals
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="text-2xl font-semibold">
+                  {loadingCounts
+                    ? "…"
+                    : (globalCounts?.byDeferralRank?.first ?? 0)}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl">
+              <CardHeader>
+                <CardTitle className="text-sm text-muted-foreground">
+                  Second deferrals
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="text-2xl font-semibold">
+                  {loadingCounts
+                    ? "…"
+                    : (globalCounts?.byDeferralRank?.second ?? 0)}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl">
+              <CardHeader>
+                <CardTitle className="text-sm text-muted-foreground">
+                  Third deferrals
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="text-2xl font-semibold">
+                  {loadingCounts
+                    ? "…"
+                    : (globalCounts?.byDeferralRank?.third ?? 0)}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>

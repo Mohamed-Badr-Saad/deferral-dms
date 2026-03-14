@@ -30,12 +30,18 @@ type Deferral = {
   createdAt: string;
   updatedAt: string;
   equipmentTag?: string | null;
+  deferralNumber?: number | null;
 };
 
 type Scope = "active" | "history" | "all";
 
 type CountsResponse = {
   byStatus: Record<string, number>;
+  byDeferralRank?: {
+    first: number;
+    second: number;
+    third: number;
+  };
   totals: { active: number; history: number; all: number };
   totalMatched: number;
 };
@@ -104,6 +110,7 @@ export default function DeferralsPage() {
   const [draftUpdatedTo, setDraftUpdatedTo] = useState(""); // yyyy-mm-dd
   const [draftDeferralCode, setDraftDeferralCode] = useState("");
   const [draftWorkOrderNo, setDraftWorkOrderNo] = useState("");
+  const [draftDeferralRank, setDraftDeferralRank] = useState<string>("ALL");
 
   // "Applied filters" are what the backend uses
   const [appliedFilters, setAppliedFilters] = useState<null | {
@@ -115,6 +122,7 @@ export default function DeferralsPage() {
     equipmentTag: string;
     updatedFromISO: string;
     updatedToISO: string;
+    deferralRank: string;
   }>(null);
 
   const pageSize = 80;
@@ -160,6 +168,8 @@ export default function DeferralsPage() {
 
       if (f.updatedFromISO) p.set("updatedFrom", f.updatedFromISO);
       if (f.updatedToISO) p.set("updatedTo", f.updatedToISO);
+      if (f.deferralRank && f.deferralRank !== "ALL")
+        p.set("deferralRank", f.deferralRank);
 
       if (mode === "items") {
         p.set("pageSize", String(pageSize));
@@ -204,6 +214,7 @@ export default function DeferralsPage() {
     setErr(null);
     setDraftDeferralCode("");
     setDraftWorkOrderNo("");
+    setDraftDeferralRank("ALL");
   }, []);
 
   const fetchMatchedTotal = useCallback(
@@ -216,6 +227,7 @@ export default function DeferralsPage() {
       equipmentTag: string;
       updatedFromISO: string;
       updatedToISO: string;
+      deferralRank: string;
     }) => {
       const p = new URLSearchParams();
       p.set("mode", "counts");
@@ -231,6 +243,8 @@ export default function DeferralsPage() {
 
       if (filters.updatedFromISO) p.set("updatedFrom", filters.updatedFromISO);
       if (filters.updatedToISO) p.set("updatedTo", filters.updatedToISO);
+      if (filters.deferralRank !== "ALL")
+        p.set("deferralRank", filters.deferralRank);
 
       const c = await api<CountsResponse>(`/api/deferrals?${p.toString()}`);
       setMatchedTotal(c?.totalMatched ?? 0);
@@ -264,6 +278,7 @@ export default function DeferralsPage() {
       equipmentTag: draftEquipmentTag.trim(),
       updatedFromISO: fromISO,
       updatedToISO: toISO,
+      deferralRank: draftDeferralRank,
     };
 
     setAppliedFilters(newApplied);
@@ -293,6 +308,8 @@ export default function DeferralsPage() {
           p.set("deferralCode", newApplied.deferralCode);
         if (newApplied.workOrderNo)
           p.set("workOrderNo", newApplied.workOrderNo);
+        if (newApplied.deferralRank !== "ALL")
+          p.set("deferralRank", newApplied.deferralRank);
         return p.toString();
       })();
 
@@ -317,6 +334,8 @@ export default function DeferralsPage() {
           p.set("deferralCode", newApplied.deferralCode);
         if (newApplied.workOrderNo)
           p.set("workOrderNo", newApplied.workOrderNo);
+        if (newApplied.deferralRank !== "ALL")
+          p.set("deferralRank", newApplied.deferralRank);
         return p.toString();
       })();
 
@@ -604,7 +623,7 @@ export default function DeferralsPage() {
 
         <CardContent className="space-y-5">
           {/* Row 1: Scope / Department / Status */}
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-4">
             {/* Scope (recommended) */}
             <div className="space-y-1">
               <div className="text-xs text-muted-foreground">Scope</div>
@@ -664,6 +683,27 @@ export default function DeferralsPage() {
                       {STATUS_LABELS[s]}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Deferral Rank */}
+            <div className="space-y-1">
+              <div className="text-xs text-muted-foreground">
+                Deferral number
+              </div>
+              <Select
+                value={draftDeferralRank}
+                onValueChange={setDraftDeferralRank}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Deferral number" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All deferrals</SelectItem>
+                  <SelectItem value="1">First deferral</SelectItem>
+                  <SelectItem value="2">Second deferral</SelectItem>
+                  <SelectItem value="3">Third deferral</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -818,6 +858,9 @@ export default function DeferralsPage() {
                         <div className="text-sm text-muted-foreground truncate">
                           Department: {d.initiatorDepartment}
                           {d.equipmentTag ? ` • ${d.equipmentTag}` : ""}
+                          {d.deferralNumber
+                            ? ` • ${d.deferralNumber}${d.deferralNumber === 1 ? "st" : d.deferralNumber === 2 ? "nd" : "rd"} deferral`
+                            : ""}
                         </div>
                       </div>
                       <div className="text-xs text-muted-foreground whitespace-nowrap text-right">
