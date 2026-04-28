@@ -26,88 +26,24 @@ import { ApprovalTimeline } from "@/src/components/deferral/ApprovalTimeline";
 import { SubmitDeferralDialog } from "@/src/components/deferral/SubmitDeferralDialog";
 import { UploadCloud, Save } from "lucide-react";
 import { WorkOrderHistoryTab } from "@/src/components/deferral/WorkOrderHistoryTab";
-import { ApprovalStatus } from "@/src/components/deferral/GmDecisionPanel";
-import { addDaysIso } from "@/src/lib/helper";
-type Deferral = {
-  id: string;
-  deferralCode: string;
-  status: string;
-  workOrderNo: string;
-  workOrderTitle: string;
-  initiatorUserId: string;
-  initiatorDepartment: string;
-
-  equipmentTag: string;
-  equipmentDescription: string;
-
-  taskCriticality: string; // YES/NO
-  safetyCriticality: string; // YES/NO
-
-  originalLafd: string | null;
-  lafdStartDate: string | null;
-  lafdEndDate: string | null;
-
-  description: string;
-  justification: string;
-  consequence: string;
-
-  mitigations: string;
-
-  // legacy single RAM fields (still in deferrals table)
-  riskCategory: string;
-  severity: number;
-  likelihood: string;
-  ramCell: string;
-  ramConsequenceLevel: string;
-
-  requiresTechnicalAuthority: boolean;
-  requiresAdHoc: boolean;
-
-  updatedAt: string;
-  createdAt?: string;
-
-  returnedAt?: string;
-  returnedByRole?: string;
-  returnedComment?: string;
-};
-
-type Profile = {
-  id: string;
-  role: string;
-  name: string;
-  department: string;
-  position: string;
-};
-
-type ApprovalRow = {
-  id: string;
-  deferralId: string;
-  stepOrder: number;
-  stepRole: string;
-  status: ApprovalStatus;
-  isActive: boolean;
-  comment: string;
-  signedAt: string | null;
-};
-
-type RiskCategory = "PEOPLE" | "ASSET" | "ENVIRONMENT" | "REPUTATION";
-type RiskRow = {
-  category: RiskCategory;
-  severity: number;
-  likelihood: string;
-  ramCell: string;
-  ramConsequenceLevel: string;
-  justification: string;
-};
-
-type Attachment = {
-  id: string;
-  fileName: string;
-  fileType: string;
-  fileSize: number;
-  filePath: string;
-  uploadedAt: string;
-};
+import { addDaysIso, formatStepRole } from "@/src/lib/helper";
+import {
+  Deferral,
+  Profile,
+  ApprovalRow,
+  RiskRow,
+  Attachment,
+  DuplicateDialogState,
+} from "./components/types";
+import { DEPARTMENTS } from "@/src/lib/constants";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const EQUIPMENT_FULL_CODE_RE = /^([^/]+\/){4}[^/]+$/;
 
@@ -157,6 +93,40 @@ function validateEquipmentCode(v: string) {
   return EQUIPMENT_FULL_CODE_RE.test((v ?? "").trim());
 }
 
+function useDebouncedCallback<T extends (...args: any[]) => void>(
+  fn: T,
+  waitMs: number,
+) {
+  const t = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancel = useCallback(() => {
+    if (t.current) clearTimeout(t.current);
+    t.current = null;
+  }, []);
+
+  const flush = useCallback(
+    (...args: Parameters<T>) => {
+      cancel();
+      fn(...args);
+    },
+    [cancel, fn],
+  );
+
+  const call = useCallback(
+    (...args: Parameters<T>) => {
+      cancel();
+      t.current = setTimeout(() => fn(...args), waitMs);
+    },
+    [cancel, fn, waitMs],
+  );
+
+  useEffect(() => {
+    return () => cancel();
+  }, [cancel]);
+
+  return { call, cancel, flush };
+}
+
 export default function DeferralDetailsPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -168,6 +138,11 @@ export default function DeferralDetailsPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [workOrderNo, setWorkOrderNo] = useState("");
   const [workOrderTitle, setWorkOrderTitle] = useState("");
+  const [duplicateWarning, setDuplicateWarning] = useState<null | {
+    duplicateRank: number;
+    message: string;
+    blocked: boolean;
+  }>(null);
 
   const [approvals, setApprovals] = useState<ApprovalRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -210,7 +185,79 @@ export default function DeferralDetailsPage() {
   const [description, setDescription] = useState("");
   const [justification, setJustification] = useState("");
   const [consequence, setConsequence] = useState("");
-  const [mitigations, setMitigations] = useState("");
+  const [mitigationRows, setMitigationRows] = useState<
+    Array<{ id?: string; mitigationText: string; requiredDepartment: string }>
+  >([{ mitigationText: "", requiredDepartment: "" }]);
+
+  const [duplicateInfo, setDuplicateInfo] =
+    useState<DuplicateDialogState>(null);
+
+  const [confirmDuplicate, setConfirmDuplicate] = useState(false);
+
+  const woCheck = useDebouncedCallback(async (workOrderNo: string) => {
+    const trimmed = workOrderNo.trim();
+    if (!trimmed) {
+      setDuplicateInfo(null);
+      setConfirmDuplicate(false);
+      return;
+    }
+
+    try {
+      const check = await api<{
+        exists: boolean;
+        duplicateRank: number;
+        existingCount: number;
+        needsConfirmation: boolean;
+        blocked: boolean;
+        message: string;
+      }>("/api/deferrals/check-work-order", {
+        method: "POST",
+        json: {
+          workOrderNo,
+          deferralId: deferralId ?? item?.id ?? null,
+        },
+      });
+
+      if (check.blocked || check.needsConfirmation) {
+        setDuplicateInfo(check);
+        return;
+      }
+      setDuplicateInfo(null);
+    } catch (e: any) {
+      console.error(e);
+    }
+  }, 500);
+
+  async function handleWorkOrderBlur(nextWorkOrderNo: string) {
+    if (!item?.id) return;
+
+    const res = await fetch("/api/deferrals/check-work-order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workOrderNo: nextWorkOrderNo,
+        deferralId: item.id,
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return;
+
+    if (data.blocked || data.needsConfirmation) {
+      setDuplicateInfo({
+        source: "change",
+        duplicateRank: data.duplicateRank,
+        existingCount: data.existingCount ?? 0,
+        needsConfirmation: Boolean(data.needsConfirmation),
+        blocked: Boolean(data.blocked),
+        message: data.message ?? "",
+        workOrderNo: nextWorkOrderNo,
+        workOrderTitle: workOrderTitle ?? "",
+      });
+    } else {
+      setDuplicateInfo(null);
+    }
+  }
 
   const [riskRows, setRiskRows] = useState<RiskRow[]>([]);
   const [riskSaving, setRiskSaving] = useState(false);
@@ -281,12 +328,18 @@ export default function DeferralDetailsPage() {
     "details",
   );
 
+  const [pendingSubmit, setPendingSubmit] = useState<{
+    workOrderNo: string;
+    workOrderTitle: string;
+  } | null>(null);
+
   const [deferralHistory, setDeferralHistory] = useState<
     {
       cycle: number;
       stepRole: string;
       comment: string;
       signedAt: string | null;
+      signedByNameSnapshot: string;
     }[]
   >([]);
   const [histLoading, setHistLoading] = useState(false);
@@ -337,7 +390,15 @@ export default function DeferralDetailsPage() {
     setDescription(d.description ?? "");
     setJustification(d.justification ?? "");
     setConsequence(d.consequence ?? "");
-    setMitigations(d.mitigations ?? "");
+    setMitigationRows(
+      Array.isArray(d.mitigationRows) && d.mitigationRows.length > 0
+        ? d.mitigationRows.map((m: any) => ({
+            id: m.id,
+            mitigationText: m.mitigationText ?? m.description ?? "",
+            requiredDepartment: m.requiredDepartment ?? "",
+          }))
+        : [{ mitigationText: "", requiredDepartment: "" }],
+    );
   }, []);
 
   const deferredMin = lafdCurrent ? addDaysIso(lafdCurrent, 1) : undefined;
@@ -392,8 +453,13 @@ export default function DeferralDetailsPage() {
     if (!(d.description ?? "").trim()) missing.push("Description");
     if (!(d.justification ?? "").trim()) missing.push("Justification");
     if (!(d.consequence ?? "").trim()) missing.push("Consequence");
-    if (!(d.mitigations ?? "").trim()) missing.push("Mitigations");
-
+    if (
+      !mitigationRows.some(
+        (m) => m.mitigationText.trim() && m.requiredDepartment.trim(),
+      )
+    ) {
+      missing.push("Mitigations");
+    }
     if (!Array.isArray(risks) || risks.length === 0)
       missing.push("Associated Risk (RAM)");
 
@@ -656,7 +722,6 @@ export default function DeferralDetailsPage() {
       toast.error("Maximum deferred period is 6 months.");
       return;
     }
-    console.log(lafdCurrent);
     setLafdDeferredTo(next.toISOString().slice(0, 10));
     // queue patch
     queuePatch({
@@ -668,31 +733,51 @@ export default function DeferralDetailsPage() {
 
   // ---------- Submit ----------
   const [busy, setBusy] = useState(false);
-
-  async function submitViaDialog(workOrderNo: string, workOrderTitle: string) {
+  async function submitViaDialog(
+    wNo: string,
+    wTitle: string,
+    confirmDuplicate = false,
+  ) {
     if (!item) return;
+
     setBusy(true);
     try {
       await flushRisksSave();
-      await flushPatch(); // ensure latest edits saved before submit
-      await api(`/api/deferrals/${item.id}/submit`, {
+      await flushPatch();
+
+      const res = await fetch(`/api/deferrals/${item.id}/submit`, {
         method: "POST",
-        json: { workOrderNo, workOrderTitle },
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workOrderNo: wNo,
+          workOrderTitle: wTitle,
+          confirmDuplicate,
+        }),
       });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        toast("Error", {
+          description: data?.detail ?? data?.message ?? "Submit failed",
+        });
+        return;
+      }
+
+      // Clear any duplicate dialog state once submit succeeds
+      setDuplicateInfo(null);
+      setPendingSubmit(null);
+
       toast("Submitted", {
         description: "Deferral submitted into the workflow.",
       });
+
       await load();
       router.refresh();
     } catch (e: any) {
-      const msg = String(e?.message ?? "Submit failed");
-      if (msg.toLowerCase().includes("already has 3 deferrals")) {
-        toast.warning("Work order deferrals limit reached", {
-          description: msg,
-        });
-      } else {
-        toast("Server error", { description: msg });
-      }
+      toast("Server error", {
+        description: e?.message ?? "Submit failed",
+      });
     } finally {
       setBusy(false);
     }
@@ -777,7 +862,59 @@ export default function DeferralDetailsPage() {
                 });
               }}
               onSubmit={async ({ workOrderNo, workOrderTitle }) => {
-                await submitViaDialog(workOrderNo, workOrderTitle);
+                const mitigationPayload = mitigationRows
+                  .map((m) => ({
+                    mitigationText: m.mitigationText.trim(),
+                    requiredDepartment: m.requiredDepartment.trim(),
+                  }))
+                  .filter((m) => m.mitigationText && m.requiredDepartment);
+
+                if (mitigationPayload.length > 0) {
+                  await api(`/api/deferrals/${item.id}`, {
+                    method: "PATCH",
+                    json: { mitigations: mitigationPayload },
+                  });
+                }
+
+                const checkRes = await fetch(
+                  `/api/deferrals/check-work-order`,
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      workOrderNo,
+                      deferralId: item.id,
+                    }),
+                  },
+                );
+
+                const checkData = await checkRes.json().catch(() => ({}));
+
+                if (!checkRes.ok) {
+                  throw new Error(
+                    checkData?.detail ??
+                      checkData?.message ??
+                      "Failed to validate work order",
+                  );
+                }
+
+                if (checkData?.blocked || checkData?.needsConfirmation) {
+                  setPendingSubmit({ workOrderNo, workOrderTitle });
+                  setDuplicateInfo({
+                    source: "submit",
+                    duplicateRank: checkData.duplicateRank,
+                    existingCount: checkData.existingCount ?? 0,
+                    needsConfirmation: Boolean(checkData.needsConfirmation),
+                    blocked: Boolean(checkData.blocked),
+                    message: checkData.message ?? "",
+                    workOrderNo,
+                    workOrderTitle,
+                  });
+
+                  throw new Error("__duplicate_warning__");
+                }
+
+                await submitViaDialog(workOrderNo, workOrderTitle, false);
               }}
             />
           )}
@@ -1030,9 +1167,26 @@ export default function DeferralDetailsPage() {
                   <div className="text-xs text-muted-foreground">
                     Mitigations
                   </div>
-                  <div className="whitespace-pre-wrap">
-                    {item.mitigations || "—"}
-                  </div>
+                  {Array.isArray(item.mitigationRows) &&
+                  item.mitigationRows.length > 0 ? (
+                    <div className="space-y-2 mt-1">
+                      {item.mitigationRows.map((m: any, i: number) => (
+                        <div
+                          key={m.id ?? i}
+                          className="rounded-lg border p-3 text-sm"
+                        >
+                          <div className="text-xs font-medium text-muted-foreground mb-1">
+                            {m.requiredDepartment || "No department"}
+                          </div>
+                          <div className="whitespace-pre-wrap">
+                            {m.mitigationText || m.description || "—"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground">—</div>
+                  )}
                 </div>
 
                 <Separator />
@@ -1123,9 +1277,13 @@ export default function DeferralDetailsPage() {
                         <Input
                           value={workOrderNo}
                           onChange={(e) => {
-                            setWorkOrderNo(e.target.value);
-                            queuePatch({ workOrderNo: e.target.value });
+                            const v = e.target.value;
+                            setWorkOrderNo(v);
+                            queuePatch({ workOrderNo: v });
                           }}
+                          onBlur={(e) =>
+                            void handleWorkOrderBlur(e.target.value.trim())
+                          }
                           placeholder="work Order Number"
                           disabled={!canEditDraft}
                         />
@@ -1270,6 +1428,7 @@ export default function DeferralDetailsPage() {
                         <Input
                           type="date"
                           value={lafdCurrent}
+                          min={originalLafd}
                           onChange={(e) => {
                             const v = e.target.value;
                             setLafdCurrent(v);
@@ -1532,18 +1691,122 @@ export default function DeferralDetailsPage() {
                   </TabsContent>
 
                   {/* MITIGATION */}
-                  <TabsContent value="mitigation" className="mt-4 space-y-2">
-                    <Textarea
-                      value={mitigations}
-                      onChange={(e) => {
-                        setMitigations(e.target.value);
-                        queuePatch({ mitigations: e.target.value });
-                      }}
-                      rows={10}
-                      disabled={!canEditDraft}
-                    />
+                  <TabsContent value="mitigation" className="mt-4 space-y-3">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        disabled={!canEditDraft || saving}
+                        onClick={async () => {
+                          const payload = mitigationRows
+                            .map((m) => ({
+                              mitigationText: m.mitigationText.trim(),
+                              requiredDepartment: m.requiredDepartment.trim(),
+                            }))
+                            .filter(
+                              (m) => m.mitigationText && m.requiredDepartment,
+                            );
+                          await patchNow({ mitigations: payload });
+                        }}
+                      >
+                        <Save className="mr-2 h-4 w-4" />
+                        {saving ? "Saving..." : "Save"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!canEditDraft}
+                        onClick={() =>
+                          setMitigationRows((prev) => [
+                            ...prev,
+                            { mitigationText: "", requiredDepartment: "" },
+                          ])
+                        }
+                      >
+                        + Add mitigation
+                      </Button>
+                    </div>
+
+                    {mitigationRows.map((row, index) => (
+                      <div
+                        key={row.id ?? index}
+                        className="rounded-xl border p-4 space-y-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-muted-foreground">
+                            Mitigation {index + 1}
+                          </span>
+                          {canEditDraft && mitigationRows.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setMitigationRows((prev) =>
+                                  prev.filter((_, i) => i !== index),
+                                )
+                              }
+                            >
+                              Remove
+                            </Button>
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="text-xs text-muted-foreground">
+                            Required Department
+                          </div>
+                          <Select
+                            value={row.requiredDepartment}
+                            disabled={!canEditDraft}
+                            onValueChange={(v) =>
+                              setMitigationRows((prev) =>
+                                prev.map((r, i) =>
+                                  i === index
+                                    ? { ...r, requiredDepartment: v }
+                                    : r,
+                                ),
+                              )
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select department..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {DEPARTMENTS.map((dept) => (
+                                <SelectItem key={dept} value={dept}>
+                                  {dept}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="text-xs text-muted-foreground">
+                            Mitigation Action
+                          </div>
+                          <Textarea
+                            value={row.mitigationText}
+                            disabled={!canEditDraft}
+                            onChange={(e) =>
+                              setMitigationRows((prev) =>
+                                prev.map((r, i) =>
+                                  i === index
+                                    ? { ...r, mitigationText: e.target.value }
+                                    : r,
+                                ),
+                              )
+                            }
+                            placeholder="Describe this mitigation and the required action"
+                            rows={4}
+                          />
+                        </div>
+                      </div>
+                    ))}
+
                     <div className="text-xs text-muted-foreground">
-                      Tip: write mitigations as actionable steps.
+                      All department heads will be included in the approval
+                      cycle after your department head.
                     </div>
                   </TabsContent>
 
@@ -1567,9 +1830,6 @@ export default function DeferralDetailsPage() {
                             disabled={!canEditDraft}
                             onChange={(e) => {
                               const fl = e.target.files;
-                              console.log("INPUT onChange fired", {
-                                filesCount: fl?.length ?? 0,
-                              });
 
                               // IMPORTANT: call upload first, then reset value
                               void uploadAttachments(fl);
@@ -1675,7 +1935,17 @@ export default function DeferralDetailsPage() {
                   {deferralHistory.map((h, idx) => (
                     <div key={idx} className="rounded-xl border p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="font-medium">{h.stepRole}</div>
+                        <div>
+                          <div className="font-medium">
+                            {formatStepRole(formatStepRole(h.stepRole))}
+                          </div>
+                          {h.signedByNameSnapshot && (
+                            <div className="text-xs text-muted-foreground">
+                              by {h.signedByNameSnapshot}
+                            </div>
+                          )}
+                        </div>
+
                         <Badge variant="secondary">Cycle #{h.cycle}</Badge>
                       </div>
 
@@ -1709,6 +1979,80 @@ export default function DeferralDetailsPage() {
         </TabsContent>
       </Tabs>
 
+      {duplicateInfo && (
+        <AlertDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setDuplicateInfo(null);
+              if (duplicateInfo.source === "submit") {
+                setPendingSubmit(null);
+                setConfirmDuplicate(false);
+              }
+            }
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {duplicateInfo.blocked
+                  ? "Maximum deferrals reached"
+                  : duplicateInfo.duplicateRank === 2
+                    ? "Second deferral for this Work Order"
+                    : "Third deferral for this Work Order"}
+              </AlertDialogTitle>
+
+              <AlertDialogDescription>
+                {duplicateInfo.message}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+
+            <AlertDialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDuplicateInfo(null);
+
+                  if (duplicateInfo.source === "submit") {
+                    setPendingSubmit(null);
+                    setConfirmDuplicate(false);
+                  }
+                }}
+              >
+                {duplicateInfo.blocked ? "Close" : "Cancel"}
+              </Button>
+
+              {!duplicateInfo.blocked && duplicateInfo.source === "submit" && (
+                <Button
+                  onClick={async () => {
+                    if (!pendingSubmit) return;
+
+                    const { workOrderNo, workOrderTitle } = pendingSubmit;
+
+                    setConfirmDuplicate(true);
+                    setDuplicateInfo(null);
+                    setPendingSubmit(null);
+
+                    await submitViaDialog(workOrderNo, workOrderTitle, true);
+                  }}
+                >
+                  Yes, continue
+                </Button>
+              )}
+
+              {!duplicateInfo.blocked && duplicateInfo.source === "change" && (
+                <Button
+                  onClick={() => {
+                    setDuplicateInfo(null);
+                  }}
+                >
+                  OK
+                </Button>
+              )}
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
       {/* *********** */}
     </div>
   );

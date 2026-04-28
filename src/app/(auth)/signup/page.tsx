@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-
+import { DEPARTMENTS } from "@/src/lib/constants";
 import {
   Popover,
   PopoverContent,
@@ -26,20 +26,6 @@ import {
 } from "@/components/ui/command";
 import { Eye, EyeOff } from "lucide-react";
 
-const DEPARTMENTS = [
-  "Electrical",
-  "Mechanical",
-  "instrument",
-  "Turbo",
-  "Civil",
-  "HVAC",
-  "Telecom",
-  "Condition monitoring",
-  "inspection",
-  "painting",
-  "Subsea control",
-  "Production",
-] as const;
 
 export default function SignupPage() {
   const [loading, setLoading] = useState(false);

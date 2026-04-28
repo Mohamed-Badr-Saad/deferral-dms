@@ -64,4 +64,7 @@ export const deferrals = pgTable("deferrals", {
   returnedAt: timestamp("returned_at", { withTimezone: true }).default(null),
   returnedByRole: text("returned_by_role").default(null),
   returnedComment: text("returned_comment").default(null),
+
+  // Add after returnedComment:
+  deletedReason: text("deleted_reason").default(null),
 });

@@ -6,108 +6,41 @@ import { api } from "@/src/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+
 import { StatusPill } from "@/src/components/deferral/StatusPill";
 import { USER_ROLE_LABELS } from "@/src/lib/constants";
 import { toast } from "sonner";
-import {
-  GmDecisionPanel,
-  type ApprovalStatus,
-} from "@/src/components/deferral/GmDecisionPanel";
+
 import { useRouter } from "next/navigation";
 
-type Deferral = {
-  id: string;
-  deferralCode: string;
-  status: string;
-  workOrderNo: string;
-  workOrderTitle: string;
-  initiatorUserId: string;
-  initiatorDepartment: string;
-
-  equipmentTag: string;
-  equipmentDescription: string;
-
-  taskCriticality: string; // YES/NO
-  safetyCriticality: string; // YES/NO
-
-  lafdStartDate: string | null;
-  lafdEndDate: string | null;
-
-  description: string;
-  justification: string;
-  consequence: string;
-
-  mitigations: string;
-
-  // legacy single RAM fields (still in deferrals table)
-  riskCategory: string;
-  severity: number;
-  likelihood: string;
-  ramCell: string;
-  ramConsequenceLevel: string;
-
-  requiresTechnicalAuthority: boolean;
-  requiresAdHoc: boolean;
-
-  updatedAt: string;
-  createdAt?: string;
-
-  returnedAt?: string;
-  returnedByRole?: string;
-  returnedComment?: string;
-};
-
-type ApprovalRow = {
-  approval: {
-    id: string;
-    deferralId: string;
-    stepRole: string;
-    stepOrder: number;
-    status: "PENDING" | "APPROVED" | "REJECTED" | "SKIPPED";
-    isActive: boolean;
-    comment: string;
-    signedAt: string | null;
-  };
-  deferral: {
-    id: string;
-    deferralCode: string;
-    initiatorDepartment: string;
-    status: string;
-    updatedAt: string;
-  };
-};
-type Profile = {
-  id: string;
-  role: string;
-  name: string;
-  department: string;
-  position: string;
-};
-
-type ApiRes = {
-  ok: boolean;
-  pending: ApprovalRow[];
-  history: ApprovalRow[];
-  parallelCounts: Record<
-    string,
-    { total: number; approved: number; pending: number }
-  >;
-};
+import { ApprovalRow, Profile, ApiRes } from "./components/types";
+import { ApprovalCard } from "./components/ApprovalCard";
+import { formatStepRole } from "@/src/lib/helper";
 
 function roleLabel(role: string) {
   return (USER_ROLE_LABELS as any)[role] ?? role;
 }
 
+function isMitigationApproval(row: ApprovalRow, profile: Profile | null) {
+  if (row.approval.stepRole !== "DEPARTMENT_HEAD") return false;
+  if (!profile) return false;
+  const target = (row.approval.targetDepartment ?? "").trim().toLowerCase();
+  const initiatorDept = (row.deferral.initiatorDepartment ?? "")
+    .trim()
+    .toLowerCase();
+  // If the approval target department is DIFFERENT from the initiator's department,
+  // this DH is here because of a mitigation — not as the initiator's own DH
+  return target !== "" && target !== initiatorDept;
+}
+
 export default function ApprovalsPage() {
   const [data, setData] = useState<ApiRes | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // per-approval comment editing
   const [comment, setComment] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const router = useRouter();
+
   async function load() {
     setLoading(true);
     try {
@@ -116,9 +49,7 @@ export default function ApprovalsPage() {
       const res = await api<ApiRes>("/api/approvals/my");
       setData(res);
     } catch (e: any) {
-      toast("Error", {
-        description: e.message ?? "Failed to load approvals",
-      });
+      toast("Error", { description: e.message ?? "Failed to load approvals" });
     } finally {
       setLoading(false);
     }
@@ -132,6 +63,17 @@ export default function ApprovalsPage() {
   const pending = useMemo(() => data?.pending ?? [], [data]);
   const history = useMemo(() => data?.history ?? [], [data]);
 
+  // Split pending into department approvals and mitigation approvals
+  const deptPending = useMemo(
+    () => pending.filter((row) => !isMitigationApproval(row, profile)),
+    [pending, profile],
+  );
+
+  const mitigationPending = useMemo(
+    () => pending.filter((row) => isMitigationApproval(row, profile)),
+    [pending, profile],
+  );
+
   async function approve(approvalId: string) {
     setBusyId(approvalId);
     try {
@@ -144,21 +86,15 @@ export default function ApprovalsPage() {
       );
 
       if (res.warning) {
-        toast("Signature missing", {
-          description: res.warning,
-        });
+        toast("Signature missing", { description: res.warning });
       } else {
-        toast("Approved", {
-          description: "Approval recorded successfully.",
-        });
+        toast("Approved", { description: "Approval recorded successfully." });
       }
 
       setComment((c) => ({ ...c, [approvalId]: "" }));
       await load();
     } catch (e: any) {
-      toast("Error", {
-        description: e.message ?? "Approve failed",
-      });
+      toast("Error", { description: e.message ?? "Approve failed" });
     } finally {
       setBusyId(null);
     }
@@ -168,7 +104,7 @@ export default function ApprovalsPage() {
     const c = (comment[approvalId] ?? "").trim();
     if (c.length < 2) {
       toast("Validation error", {
-        description: "Comment is required to refuse.",
+        description: "Comment is required to reject.",
       });
       return;
     }
@@ -188,13 +124,13 @@ export default function ApprovalsPage() {
       setComment((x) => ({ ...x, [approvalId]: "" }));
       await load();
     } catch (e: any) {
-      toast("Error", {
-        description: e.message ?? "Reject failed",
-      });
+      toast("Error", { description: e.message ?? "Reject failed" });
     } finally {
       setBusyId(null);
     }
   }
+
+
 
   return (
     <div className="space-y-6">
@@ -205,14 +141,22 @@ export default function ApprovalsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="pending">
+      <Tabs
+        defaultValue={mitigationPending.length > 0 ? "mitigation" : "pending"}
+      >
         <TabsList>
-          <TabsTrigger value="pending">Pending ({pending.length})</TabsTrigger>
+          <TabsTrigger value="pending">
+            Department ({deptPending.length})
+          </TabsTrigger>
+          <TabsTrigger value="mitigation" className="relative">
+            Mitigation ({mitigationPending.length})
+          </TabsTrigger>
           <TabsTrigger value="history">
             Approved by me ({history.length})
           </TabsTrigger>
         </TabsList>
 
+        {/* DEPARTMENT APPROVALS */}
         <TabsContent value="pending" className="space-y-4">
           {loading ? (
             <Card>
@@ -220,128 +164,77 @@ export default function ApprovalsPage() {
                 Loading...
               </CardContent>
             </Card>
-          ) : pending.length === 0 ? (
+          ) : deptPending.length === 0 ? (
             <Card>
               <CardContent className="p-6 text-sm text-muted-foreground">
-                No pending approvals.
+                No pending department approvals.
               </CardContent>
             </Card>
           ) : (
-            pending.map((row) => {
-              const p = data?.parallelCounts?.[row.deferral.id];
-
-              return (
-                <Card key={row.approval.id}>
-                  <CardHeader className="flex flex-row items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <CardTitle className="truncate">
-                        {row.deferral.deferralCode}
-                      </CardTitle>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                        <span>
-                          Step:{" "}
-                          <span className="font-medium">
-                            {roleLabel(row.approval.stepRole)}
-                          </span>
-                        </span>
-                        <span>
-                          Dept:{" "}
-                          <span className="font-medium">
-                            {row.deferral.initiatorDepartment}
-                          </span>
-                        </span>
-                        <StatusPill status={row.deferral.status} />
-                        <span>
-                          Updated:{" "}
-                          <span className="font-medium">
-                            {new Date(row.deferral.updatedAt).toLocaleString()}
-                          </span>
-                        </span>
-                      </div>
-
-                      {p ? (
-                        <div className="mt-2 text-xs text-muted-foreground">
-                          Parallel segment progress:{" "}
-                          <span className="font-medium">
-                            {p.approved}/{p.total}
-                          </span>{" "}
-                          completed
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <Button asChild variant="secondary">
-                      <Link href={`/deferrals/${row.deferral.id}`}>Open</Link>
-                    </Button>
-                  </CardHeader>
-
-                  <CardContent className="space-y-3">
-                    {profile?.role === "RELIABILITY_GM" &&
-                      row.approval.stepRole === "RELIABILITY_GM" && (
-                        <GmDecisionPanel
-                          deferralId={row.deferral.id}
-                          initialTA={Boolean(
-                            (row.deferral as any).requiresTechnicalAuthority,
-                          )}
-                          initialAdHoc={Boolean(
-                            (row.deferral as any).requiresAdHoc,
-                          )}
-                          gmApprovalStatus={row.approval.status as any}
-                          gmApprovalIsActive={Boolean(row.approval.isActive)}
-                          canEdit={true}
-                          onSaved={async () => {
-                            await load();
-                            router.refresh();
-                          }}
-                        />
-                      )}
-                    <div className="space-y-2">
-                      <div className="text-xs text-muted-foreground">
-                        Comment (optional for approve, required for reject)
-                      </div>
-                      <Textarea
-                        value={comment[row.approval.id] ?? ""}
-                        onChange={(e) =>
-                          setComment((c) => ({
-                            ...c,
-                            [row.approval.id]: e.target.value,
-                          }))
-                        }
-                        placeholder="Add comment..."
-                      />
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        onClick={() => approve(row.approval.id)}
-                        disabled={busyId === row.approval.id}
-                      >
-                        {busyId === row.approval.id ? "Working..." : "Approve"}
-                      </Button>
-
-                      <Button
-                        variant="destructive"
-                        onClick={() => refuse(row.approval.id)}
-                        disabled={busyId === row.approval.id}
-                      >
-                        {busyId === row.approval.id
-                          ? "Working..."
-                          : "Reject & Return"}
-                      </Button>
-                    </div>
-
-                    <div className="text-xs text-muted-foreground">
-                      Rejecting will mark the deferral as{" "}
-                      <span className="font-medium">REJECTED</span> and return
-                      it to the Reliability Engineer and the initiator.
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })
+            deptPending.map((row) => (
+              <ApprovalCard
+                key={row.approval.id}
+                row={row}
+                isMitigation={false}
+                comment={comment[row.approval.id] ?? ""}
+                busyId={busyId}
+                profile={profile}
+                parallelCounts={data?.parallelCounts?.[row.deferral.id]}
+                onCommentChange={(id, val) =>
+                  setComment((c) => ({ ...c, [id]: val }))
+                }
+                onApprove={approve}
+                onRefuse={refuse}
+                onSaved={async () => {
+                  await load();
+                  router.refresh();
+                }}
+              />
+            ))
           )}
         </TabsContent>
 
+        {/* MITIGATION APPROVALS */}
+        <TabsContent value="mitigation" className="space-y-4">
+          {loading ? (
+            <Card>
+              <CardContent className="p-6 text-sm text-muted-foreground">
+                Loading...
+              </CardContent>
+            </Card>
+          ) : mitigationPending.length === 0 ? (
+            <Card>
+              <CardContent className="p-6 text-sm text-muted-foreground">
+                No pending mitigation approvals.
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {mitigationPending.map((row) => (
+                <ApprovalCard
+                  key={row.approval.id}
+                  row={row}
+                  isMitigation={true}
+                  comment={comment[row.approval.id] ?? ""}
+                  busyId={busyId}
+                  profile={profile}
+                  parallelCounts={data?.parallelCounts?.[row.deferral.id]}
+                  onCommentChange={(id, val) =>
+                    setComment((c) => ({ ...c, [id]: val }))
+                  }
+                  onApprove={approve}
+                  onRefuse={refuse}
+                  onSaved={async () => {
+                    await load();
+                    router.refresh();
+                  }}
+                />
+              ))}
+            </>
+          )}
+        </TabsContent>
+
+        {/* HISTORY */}
         <TabsContent value="history" className="space-y-4">
           {loading ? (
             <Card>
@@ -365,13 +258,14 @@ export default function ApprovalsPage() {
                       <span>
                         Approved as:{" "}
                         <span className="font-medium">
-                          {roleLabel(row.approval.stepRole)}
+                          {roleLabel(formatStepRole(row.approval.stepRole))}
                         </span>
                       </span>
                       <span>
                         Dept:{" "}
                         <span className="font-medium">
-                          {row.deferral.initiatorDepartment}
+                          {row.approval.targetDepartment ||
+                            row.deferral.initiatorDepartment}
                         </span>
                       </span>
                       <StatusPill status={row.deferral.status} />
@@ -385,12 +279,10 @@ export default function ApprovalsPage() {
                       </span>
                     </div>
                   </div>
-
                   <Button asChild variant="secondary">
                     <Link href={`/deferrals/${row.deferral.id}`}>Open</Link>
                   </Button>
                 </CardHeader>
-
                 <CardContent>
                   {row.approval.comment ? (
                     <div className="text-sm text-muted-foreground whitespace-pre-wrap">

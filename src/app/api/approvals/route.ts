@@ -31,8 +31,22 @@ export async function GET() {
           and(
             isNull(deferralApprovals.assignedUserId),
             eq(deferralApprovals.stepRole, profile.role),
+            // Only show if targetDepartment matches user's department (or is null/empty)
+            or(
+              isNull(deferralApprovals.targetDepartment),
+              eq(deferralApprovals.targetDepartment, profile.department),
+            ),
+            // Only show if targetGmGroup matches user's gmGroup (or is null/empty)
+            or(
+              isNull(deferralApprovals.targetGmGroup),
+              eq(
+                deferralApprovals.targetGmGroup as any,
+                (profile as any).gmGroup ?? "",
+              ),
+            ),
           ),
         ),
+        [],
       ),
     );
 

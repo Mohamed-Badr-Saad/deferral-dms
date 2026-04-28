@@ -125,6 +125,32 @@ export default function DeferralsPage() {
     deferralRank: string;
   }>(null);
 
+  const exportCsv = useCallback(() => {
+    if (!appliedFilters) return;
+
+    const p = new URLSearchParams();
+    p.set("scope", appliedFilters.scope);
+
+    if (appliedFilters.department)
+      p.set("department", appliedFilters.department);
+    if (appliedFilters.status && appliedFilters.status !== "ALL")
+      p.set("status", appliedFilters.status);
+    if (appliedFilters.deferralCode)
+      p.set("deferralCode", appliedFilters.deferralCode);
+    if (appliedFilters.workOrderNo)
+      p.set("workOrderNo", appliedFilters.workOrderNo);
+    if (appliedFilters.equipmentTag)
+      p.set("equipmentTag", appliedFilters.equipmentTag);
+    if (appliedFilters.updatedFromISO)
+      p.set("updatedFrom", appliedFilters.updatedFromISO);
+    if (appliedFilters.updatedToISO)
+      p.set("updatedTo", appliedFilters.updatedToISO);
+    if (appliedFilters.deferralRank && appliedFilters.deferralRank !== "ALL")
+      p.set("deferralRank", appliedFilters.deferralRank);
+
+    window.open(`/api/deferrals/export?${p.toString()}`, "_blank");
+  }, [appliedFilters]);
+
   const pageSize = 80;
 
   // sentinel for infinite scroll
@@ -818,13 +844,23 @@ export default function DeferralsPage() {
             )}
           </div>
 
-          <Button
-            variant="outline"
-            onClick={refreshResults}
-            disabled={!appliedFilters || loadingItems || loadingMore}
-          >
-            {loadingItems ? "Refreshing…" : "Refresh results"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={exportCsv}
+              disabled={!appliedFilters || loadingItems || loadingMore}
+            >
+              Export CSV
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={refreshResults}
+              disabled={!appliedFilters || loadingItems || loadingMore}
+            >
+              {loadingItems ? "Refreshing…" : "Refresh results"}
+            </Button>
+          </div>
         </CardHeader>
 
         <CardContent

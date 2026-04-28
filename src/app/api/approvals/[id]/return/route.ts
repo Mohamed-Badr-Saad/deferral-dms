@@ -5,6 +5,7 @@ import { deferralApprovals, deferrals } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
 import { and, eq } from "drizzle-orm";
 import { notifyUser } from "@/src/lib/approval-progress";
+import { formatStepRole } from "@/src/lib/helper";
 
 const BodySchema = z.object({
   comment: z.string().min(3, "Comment is required"),
@@ -177,7 +178,7 @@ export async function POST(req: Request, ctx: Ctx) {
   await notifyUser(
     def.initiatorUserId,
     "Deferral returned for revision",
-    `${effectiveApproval.stepRole} returned your deferral. Comment: ${parsed.data.comment}`,
+    `${formatStepRole(effectiveApproval.stepRole)} returned your deferral(By: ${profile.name}).\n Comment: ${parsed.data.comment}`,
     def.id,
   );
 

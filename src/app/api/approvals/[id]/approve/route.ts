@@ -5,6 +5,7 @@ import { deferralApprovals, deferrals, users } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
 import { afterApprovalAdvance, notifyUser } from "@/src/lib/approval-progress";
 import { and, eq } from "drizzle-orm";
+import { formatStepRole } from "@/src/lib/helper";
 
 const BodySchema = z.object({
   comment: z.string().optional().default(""),
@@ -120,7 +121,10 @@ export async function POST(req: Request, ctx: Ctx) {
 
   if (!effectiveApproval.isActive || effectiveApproval.status !== "PENDING") {
     return NextResponse.json(
-      { message: "Validation error", detail: "Approval is not active/pending, it is from the old cycle." },
+      {
+        message: "Validation error",
+        detail: "Approval is not active/pending, it is from the old cycle.",
+      },
       { status: 400 },
     );
   }
@@ -158,7 +162,7 @@ export async function POST(req: Request, ctx: Ctx) {
   await notifyUser(
     def.initiatorUserId,
     "Approval update",
-    `${effectiveApproval.stepRole} approved your deferral.`,
+    `${formatStepRole(effectiveApproval.stepRole)} approved your deferral (By: ${signerName}). `,
     def.id,
   );
 

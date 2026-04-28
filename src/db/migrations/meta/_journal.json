@@ -85,6 +85,13 @@
       "when": 1772223111679,
       "tag": "0011_fuzzy_alice",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1774810840252,
+      "tag": "0012_hesitant_karma",
+      "breakpoints": true
     }
   ]
 }

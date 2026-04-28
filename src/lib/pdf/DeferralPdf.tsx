@@ -8,6 +8,7 @@ import {
   Image,
 } from "@react-pdf/renderer";
 import { IMAGES, IMAGES_BASE64_CODE } from "../assets";
+import { formatStepRole } from "../helper";
 
 export type PdfDeferral = {
   deferralCode: string;
@@ -188,20 +189,7 @@ const styles = StyleSheet.create({
   },
 });
 
-const Roles = {
-  DEPARTMENT_HEAD: "Department Head",
-  RELIABILITY_ENGINEER: "Reliability Engineer",
-  RELIABILITY_GM: "Reliability GM",
-  RESPONSIBLE_GM: "Responsible GM",
-  PLANNING_ENGINEER: "Planning Engineer",
-  ENGINEER_APPLICANT: "Engineer (Applicant)",
-  SOD: "SOD",
-  DFGM: "DFGM",
-  TECHNICAL_AUTHORITY: "Technical Authority",
-  AD_HOC: "AD HOC",
-  PLANNING_SUPERVISOR_ENGINEER: "Planning Supervisor Engineer",
-  ADMIN: "Admin",
-};
+
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
@@ -412,7 +400,7 @@ export function DeferralPdfDoc(props: {
 
           {approvals.map((a, idx) => (
             <View key={`${a.stepOrder}-${idx}`} style={styles.approvalsRow}>
-              <Text style={[styles.aCell, { width: "23%" }]}>{Roles[a.stepRole]}</Text>
+              <Text style={[styles.aCell, { width: "23%" }]}>{formatStepRole(a.stepRole)}</Text>
               <Text style={[styles.aCell, { width: "23%" }]}>
                 {a.signerName || "—"}
               </Text>

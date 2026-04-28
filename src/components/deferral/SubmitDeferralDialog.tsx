@@ -64,6 +64,10 @@ export function SubmitDeferralDialog(props: {
       setWorkOrderNo("");
       setWorkOrderTitle("");
     } catch (e: any) {
+      if (e?.message === "__duplicate_warning__") {
+        setOpen(false); // close the submit dialog so the duplicate modal is visible
+        return;
+      }
       setErr(e?.message ?? "Submit failed");
     } finally {
       setBusy(false);

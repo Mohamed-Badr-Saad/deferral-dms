@@ -38,6 +38,7 @@ export async function GET(_req: Request, ctx: Ctx) {
       comment: r.comment,
       signedAt: r.signedAt,
       updatedAt: r.updatedAt,
+      signedByNameSnapshot: r.signedByNameSnapshot, // ← add this
     }))
     .sort((a, b) => {
       const ad = new Date(a.signedAt ?? a.updatedAt ?? 0).getTime();

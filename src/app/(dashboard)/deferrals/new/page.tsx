@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { useSearchParams } from "next/navigation";
 import {
   Select,
@@ -22,6 +23,16 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { UploadCloud, Save, ArrowRight } from "lucide-react";
 import { addDaysIso } from "@/src/lib/helper";
+import { min } from "drizzle-orm";
+import { DEPARTMENTS } from "@/src/lib/constants";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Deferral = {
   id: string;
@@ -43,11 +54,12 @@ type Deferral = {
   justification: string;
   consequence: string;
 
-  mitigations: string;
-
+  mitigationRows?: MitigationRow[]; // ← backend returns this
+  mitigations?: MitigationRow[] | null; // ← keep for compat
   updatedAt: string;
   createdAt: string;
 };
+type MitigationRow = { mitigationText: string; requiredDepartment: string };
 
 type Profile = {
   id: string;
@@ -77,6 +89,40 @@ type Attachment = {
   filePath: string;
   uploadedAt: string;
 };
+
+function useDebouncedCallback<T extends (...args: any[]) => void>(
+  fn: T,
+  waitMs: number,
+) {
+  const t = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancel = useCallback(() => {
+    if (t.current) clearTimeout(t.current);
+    t.current = null;
+  }, []);
+
+  const flush = useCallback(
+    (...args: Parameters<T>) => {
+      cancel();
+      fn(...args);
+    },
+    [cancel, fn],
+  );
+
+  const call = useCallback(
+    (...args: Parameters<T>) => {
+      cancel();
+      t.current = setTimeout(() => fn(...args), waitMs);
+    },
+    [cancel, fn, waitMs],
+  );
+
+  useEffect(() => {
+    return () => cancel();
+  }, [cancel]);
+
+  return { call, cancel, flush };
+}
 
 const EQUIPMENT_FULL_CODE_RE = /^([^/]+\/){4}[^/]+$/;
 
@@ -139,12 +185,61 @@ export default function NewDeferralPage() {
   const [deferral, setDeferral] = useState<Deferral | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
+  const [duplicateWarning, setDuplicateWarning] = useState<null | {
+    duplicateRank: number;
+    message: string;
+  }>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attLoading, setAttLoading] = useState(false);
   const [riskRows, setRiskRows] = useState<RiskRow[]>([]);
   const [riskSaving, setRiskSaving] = useState(false);
   const riskRowsRef = useRef<RiskRow[]>([]);
+
+  const [duplicateInfo, setDuplicateInfo] = useState<null | {
+    duplicateRank: number;
+    existingCount: number;
+    message: string;
+    needsConfirmation: boolean;
+    blocked: boolean;
+  }>(null);
+  const [confirmDuplicate, setConfirmDuplicate] = useState(false);
+
+  const woCheck = useDebouncedCallback(async (workOrderNo: string) => {
+    const trimmed = workOrderNo.trim();
+    if (!trimmed) {
+      setDuplicateInfo(null);
+      setConfirmDuplicate(false);
+      return;
+    }
+
+    try {
+      const check = await api<{
+        exists: boolean;
+        duplicateRank: number;
+        existingCount: number;
+        needsConfirmation: boolean;
+        blocked: boolean;
+        message: string;
+      }>("/api/deferrals/check-work-order", {
+        method: "POST",
+        json: {
+          workOrderNo,
+          deferralId: deferral?.id ??  null,
+        },
+      });
+
+      if (check.blocked || check.needsConfirmation) {
+        setDuplicateInfo(check);
+        return;
+      }
+
+      // no duplicates found
+      handleSubmit(false);
+    } catch (e: any) {
+      console.error(e);
+    }
+  }, 500);
+
   useEffect(() => {
     riskRowsRef.current = riskRows;
   }, [riskRows]);
@@ -220,7 +315,10 @@ export default function NewDeferralPage() {
   const [description, setDescription] = useState("");
   const [justification, setJustification] = useState("");
   const [consequence, setConsequence] = useState("");
-  const [mitigations, setMitigations] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [mitigationRows, setMitigationRows] = useState<MitigationRow[]>([
+    { mitigationText: "", requiredDepartment: "" },
+  ]);
   const searchParams = useSearchParams();
   const draftId = (searchParams.get("draftId") ?? "").trim();
   const requestDate = useMemo(() => new Date().toLocaleDateString(), []);
@@ -276,8 +374,11 @@ export default function NewDeferralPage() {
       setDescription(d.description ?? "");
       setJustification(d.justification ?? "");
       setConsequence(d.consequence ?? "");
-      setMitigations(d.mitigations ?? "");
-
+      setMitigationRows(
+        d.mitigations?.length
+          ? d.mitigations
+          : ([{ mitigationText: "", requiredDepartment: "" }] as any),
+      );
       setAttachments([]);
       setRiskRows([
         {
@@ -338,8 +439,34 @@ export default function NewDeferralPage() {
           const existing = await api<{ item: Deferral }>(
             `/api/deferrals/${draftId}`,
           );
-          setDeferral(existing.item);
-          // ...hydrate state from existing.item...
+          const d = existing.item;
+          setDeferral(d);
+          setWorkOrderNo((d as any).workOrderNo ?? "");
+          setWorkOrderTitle((d as any).workOrderTitle ?? "");
+          setEquipmentTag(d.equipmentTag ?? "");
+          setEquipmentDescription(d.equipmentDescription ?? "");
+          setSafetyCriticality(
+            (String(d.safetyCriticality || "NO").toUpperCase() as any) ?? "NO",
+          );
+          setTaskCriticality(
+            (String(d.taskCriticality || "NO").toUpperCase() as any) ?? "NO",
+          );
+          setOriginalLafd(toIsoDateInput((d as any).originalLafd));
+          setLafdCurrent(toIsoDateInput(d.lafdStartDate));
+          setLafdDeferredTo(toIsoDateInput(d.lafdEndDate));
+          setLafdAddMonths(0);
+          setDescription(d.description ?? "");
+          setJustification(d.justification ?? "");
+          setConsequence(d.consequence ?? "");
+          setMitigationRows(
+            Array.isArray(d.mitigationRows) && d.mitigationRows.length > 0
+              ? d.mitigationRows.map((m: any) => ({
+                  id: m.id,
+                  mitigationText: m.mitigationText ?? m.description ?? "",
+                  requiredDepartment: m.requiredDepartment ?? "",
+                }))
+              : [{ mitigationText: "", requiredDepartment: "" }],
+          );
           return;
         }
 
@@ -376,8 +503,36 @@ export default function NewDeferralPage() {
         const existing = await api<{ item: Deferral }>(
           `/api/deferrals/${draftId}`,
         );
-        setDeferral(existing.item);
-        // hydrate...
+        const d = existing.item;
+        setDeferral(d);
+
+        setWorkOrderNo((d as any).workOrderNo ?? "");
+        setWorkOrderTitle((d as any).workOrderTitle ?? "");
+        setEquipmentTag(d.equipmentTag ?? "");
+        setEquipmentDescription(d.equipmentDescription ?? "");
+        setSafetyCriticality(
+          (String(d.safetyCriticality || "NO").toUpperCase() as any) ?? "NO",
+        );
+        setTaskCriticality(
+          (String(d.taskCriticality || "NO").toUpperCase() as any) ?? "NO",
+        );
+        setOriginalLafd(toIsoDateInput((d as any).originalLafd));
+        setLafdCurrent(toIsoDateInput(d.lafdStartDate));
+        setLafdDeferredTo(toIsoDateInput(d.lafdEndDate));
+        setLafdAddMonths(0);
+        setDescription(d.description ?? "");
+        setJustification(d.justification ?? "");
+        setConsequence(d.consequence ?? "");
+        setMitigationRows(
+          Array.isArray(d.mitigationRows) && d.mitigationRows.length > 0
+            ? d.mitigationRows.map((m: any) => ({
+                id: m.id,
+                mitigationText: m.mitigationText ?? m.description ?? "",
+                requiredDepartment: m.requiredDepartment ?? "",
+              }))
+            : [{ mitigationText: "", requiredDepartment: "" }],
+        );
+        return;
       } finally {
         setLoading(false);
       }
@@ -456,7 +611,7 @@ export default function NewDeferralPage() {
       });
     }
 
-    await patch({
+    await queuePatch({
       workOrderNo: workOrderNo.trim(),
       workOrderTitle: workOrderTitle.trim(),
       equipmentTag: equipmentTag.trim(),
@@ -503,7 +658,7 @@ export default function NewDeferralPage() {
       return;
     }
 
-    await patch({
+    await queuePatch({
       lafdStartDate: fromIsoDateInput(lafdCurrent),
       lafdEndDate: fromIsoDateInput(lafdDeferredTo),
     } as any);
@@ -536,7 +691,7 @@ export default function NewDeferralPage() {
   }
 
   async function saveTextTab() {
-    await patch({
+    await queuePatch({
       description,
       justification,
       consequence,
@@ -545,10 +700,18 @@ export default function NewDeferralPage() {
   }
 
   async function saveMitigation() {
-    await patch({ mitigations } as any);
-    toast.success("Saved");
-  }
+    if (!deferral) return;
+    const payload = mitigationRows
+      .map((m) => ({
+        mitigationText: m.mitigationText.trim(),
+        requiredDepartment: m.requiredDepartment.trim(),
+      }))
+      .filter((m) => m.mitigationText && m.requiredDepartment);
 
+    await queuePatch({ mitigations: payload });
+    await flushPatch();
+    toast.success("Mitigations saved");
+  }
   async function loadAttachments() {
     if (!deferral) return;
     setAttLoading(true);
@@ -565,7 +728,6 @@ export default function NewDeferralPage() {
   }
 
   async function uploadAttachments(files: FileList | null) {
-    console.log("upload attachment");
     if (!deferral || !files || files.length === 0) return;
 
     const tooBig = Array.from(files).find((f) => f.size > 25 * 1024 * 1024);
@@ -655,8 +817,62 @@ export default function NewDeferralPage() {
     }
   }
 
+  async function handleSubmit(confirmDuplicate = false) {
+    setBusy(true);
+    try {
+      await flushRisksSave();
+      await flushPatch();
 
+      // Save mitigations before submit
+      const mitigationPayload = mitigationRows
+        .map((m) => ({
+          mitigationText: m.mitigationText.trim(),
+          requiredDepartment: m.requiredDepartment.trim(),
+        }))
+        .filter((m) => m.mitigationText && m.requiredDepartment);
 
+      if (mitigationPayload.length > 0 && deferral) {
+        await queuePatch({ mitigations: mitigationPayload });
+        await flushPatch();
+      }
+
+      const res = await fetch(`/api/deferrals/${deferral?.id}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workOrderNo,
+          workOrderTitle,
+          confirmDuplicate,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 409 && data?.needsDuplicateConfirmation) {
+        setDuplicateWarning({
+          duplicateRank: data.duplicateRank,
+          message: data.message,
+        });
+        return;
+      }
+
+      if (!res.ok) {
+        const msg = data?.detail ?? data?.message ?? "Submit failed";
+        toast("Server error", { description: msg });
+        return;
+      }
+
+      toast("Submitted", {
+        description: "Deferral submitted into the workflow.",
+      });
+      setDuplicateWarning(null);
+      router.push(`/deferrals/${deferral?.id}`);
+    } catch (e: any) {
+      toast("Server error", { description: e?.message ?? "Submit failed" });
+    } finally {
+      setBusy(false);
+    }
+  }
   const deferredMin = lafdCurrent ? addDaysIso(lafdCurrent, 1) : undefined;
 
   // load attachments & risks after draft exists
@@ -784,6 +1000,7 @@ export default function NewDeferralPage() {
                       const v = e.target.value;
                       setWorkOrderNo(v);
                       queuePatch({ workOrderNo: v });
+                      woCheck.call(v); // ← trigger duplicate check
                     }}
                     placeholder="Work Order Number"
                   />
@@ -931,11 +1148,11 @@ export default function NewDeferralPage() {
                   <Input
                     type="date"
                     value={lafdCurrent}
+                    min={originalLafd}
                     onChange={(e) => {
                       const v = e.target.value;
                       setLafdCurrent(v);
                       setLafdAddMonths(0);
-
                       // If existing deferred date becomes invalid, clear it
                       if (lafdDeferredTo && v) {
                         const min = addDaysIso(v, 1);
@@ -1220,25 +1437,102 @@ export default function NewDeferralPage() {
           <Card className="rounded-2xl">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Mitigation</CardTitle>
-              <Button size="sm" onClick={saveMitigation} disabled={saving}>
-                <Save className="mr-2 h-4 w-4" />
-                {saving ? "Saving..." : "Save"}
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Textarea
-                value={mitigations}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setMitigations(v);
-                  queuePatch({ mitigations: v });
-                }}
-                placeholder="Enter mitigations..."
-                rows={8}
-              />
-              <div className="text-xs text-muted-foreground">
-                List mitigations clearly and actionably.
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setMitigationRows((prev) => [
+                      ...prev,
+                      { mitigationText: "", requiredDepartment: "" },
+                    ])
+                  }
+                >
+                  + Add
+                </Button>
+                <Button size="sm" onClick={saveMitigation} disabled={saving}>
+                  <Save className="mr-2 h-4 w-4" />
+                  {saving ? "Saving..." : "Save"}
+                </Button>
               </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Add mitigations with their required departments. All department
+                heads will be included in the approval cycle after your
+                department head.
+              </p>
+
+              {mitigationRows.map((row, index) => (
+                <div key={index} className="rounded-xl border p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Mitigation {index + 1}
+                    </span>
+                    {mitigationRows.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setMitigationRows((prev) =>
+                            prev.filter((_, i) => i !== index),
+                          )
+                        }
+                      >
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">
+                      Required Department
+                    </Label>
+                    <Select
+                      value={row.requiredDepartment}
+                      onValueChange={(v) =>
+                        setMitigationRows((prev) =>
+                          prev.map((r, i) =>
+                            i === index ? { ...r, requiredDepartment: v } : r,
+                          ),
+                        )
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select department..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DEPARTMENTS.map((dept) => (
+                          <SelectItem key={dept} value={dept}>
+                            {dept}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">
+                      Mitigation Action
+                    </Label>
+                    <Textarea
+                      value={row.mitigationText}
+                      onChange={(e) =>
+                        setMitigationRows((prev) =>
+                          prev.map((r, i) =>
+                            i === index
+                              ? { ...r, mitigationText: e.target.value }
+                              : r,
+                          ),
+                        )
+                      }
+                      placeholder="Describe this mitigation and the required action"
+                      rows={4}
+                    />
+                  </div>
+                </div>
+              ))}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1258,11 +1552,7 @@ export default function NewDeferralPage() {
                       PDF / PNG / JPG / WEBP — max 25MB each.
                     </div>
                   </div>
-                  <label
-                    htmlFor={uploadInputId}
-                    className="cursor-pointer"
-                    onClick={() => console.log("LABEL CLICK")}
-                  >
+                  <label htmlFor={uploadInputId} className="cursor-pointer">
                     <input
                       id={uploadInputId}
                       type="file"
@@ -1272,11 +1562,6 @@ export default function NewDeferralPage() {
                       disabled={!canUpload}
                       onChange={(e) => {
                         const fl = e.target.files;
-                        console.log("INPUT onChange fired", {
-                          filesCount: fl?.length ?? 0,
-                          hasDeferral: !!deferral,
-                          deferralId: deferral?.id,
-                        });
 
                         // IMPORTANT: call upload first, then reset value
                         void uploadAttachments(fl);
@@ -1342,6 +1627,60 @@ export default function NewDeferralPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {duplicateInfo &&
+        (duplicateInfo.needsConfirmation || duplicateInfo.blocked) && (
+          <AlertDialog
+            open
+            onOpenChange={(open) => {
+              if (!open) setDuplicateInfo(null);
+            }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {duplicateInfo.blocked
+                    ? "Maximum deferrals reached"
+                    : duplicateInfo.duplicateRank === 2
+                      ? "Second deferral for this Work Order"
+                      : "Third deferral for this Work Order"}
+                </AlertDialogTitle>
+
+                <AlertDialogDescription>
+                  {duplicateInfo.blocked
+                    ? "This work order already has 3 deferrals. You cannot create another deferral for it."
+                    : duplicateInfo.duplicateRank === 2
+                      ? "A previous deferral already exists for this work order. Are you sure you want to create a second deferral?"
+                      : "Two previous deferrals already exist for this work order. Are you sure you want to create a third deferral?"}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+
+              <AlertDialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setDuplicateInfo(null);
+                    setConfirmDuplicate(false);
+                  }}
+                >
+                  {duplicateInfo.blocked ? "Close" : "Cancel"}
+                </Button>
+
+                {!duplicateInfo.blocked && (
+                  <Button
+                    onClick={() => {
+                      setConfirmDuplicate(true);
+                      setDuplicateInfo(null);
+                      handleSubmit(true);
+                    }}
+                  >
+                    Yes, continue
+                  </Button>
+                )}
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
     </div>
   );
 }

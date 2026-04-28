@@ -38,4 +38,7 @@ export const deferralStatusEnum = pgEnum("deferral_status", [
   "REJECTED",
   "APPROVED",
   "COMPLETED",
+  "CLOSED", // ✅ mod #3 — initiator closes after job executed
+  "DELETED", // ✅ mod #4 — soft delete of IN_APPROVAL with reason
+  "EXPIRED", // ✅ mod #6 — new LAFD has elapsed
 ]);

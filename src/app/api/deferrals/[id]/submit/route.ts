@@ -7,10 +7,12 @@ import {
   workOrders,
   workOrderDeferrals,
   deferralApprovals,
+  deferralMitigations,
   responsibleGmMappings,
+  users,
 } from "@/src/db/schema";
 import { getBusinessProfile, requireRole } from "@/src/lib/authz";
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { buildApprovalSteps } from "@/src/lib/workflow";
 import { activateFirstStep } from "@/src/lib/approval-progress";
 import { computeRamCell, computeRamConsequence } from "@/src/lib/constants";
@@ -18,6 +20,7 @@ import { computeRamCell, computeRamConsequence } from "@/src/lib/constants";
 const SubmitSchema = z.object({
   workOrderNo: z.string().min(1),
   workOrderTitle: z.string().optional().default(""),
+  confirmDuplicate: z.boolean().optional().default(false),
 });
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -44,6 +47,8 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 
+  const confirmDuplicate = parsed.data.confirmDuplicate;
+
   const defRows = await db
     .select()
     .from(deferrals)
@@ -52,12 +57,10 @@ export async function POST(req: Request, ctx: Ctx) {
   const def = defRows[0];
   if (!def) return NextResponse.json({ message: "Not found" }, { status: 404 });
 
-  // ✅ only initiator submits
   if (def.initiatorUserId !== profile.id) {
     return NextResponse.json({ message: "Permission denied" }, { status: 403 });
   }
 
-  // ✅ allow submit from DRAFT or RETURNED
   if (!(def.status === "DRAFT" || def.status === "RETURNED")) {
     return NextResponse.json(
       {
@@ -68,20 +71,31 @@ export async function POST(req: Request, ctx: Ctx) {
     );
   }
 
+  const mitigationRows = await db
+    .select()
+    .from(deferralMitigations)
+    .where(eq(deferralMitigations.deferralId, deferralId))
+    .orderBy(asc(deferralMitigations.createdAt));
+
+  if (mitigationRows.length === 0) {
+    return NextResponse.json(
+      { message: "At least one mitigation is required before submitting." },
+      { status: 400 },
+    );
+  }
+
   try {
     let newCycle = 0;
 
     await db.transaction(async (tx) => {
-      // 0) increment approval cycle
       newCycle = Number(def.approvalCycle ?? 0) + 1;
 
-      // to mark old approvals as inactive (for safety, should not be active at this point)
       await tx
         .update(deferralApprovals)
         .set({ isActive: false } as any)
         .where(eq(deferralApprovals.deferralId, deferralId));
 
-      // 1) Find or create work order
+      // Find or create work order
       const woExisting = await tx
         .select()
         .from(workOrders)
@@ -97,8 +111,7 @@ export async function POST(req: Request, ctx: Ctx) {
         } as any);
       }
 
-      // 2) Determine deferral number (1..3)
-      // ✅ IMPORTANT: if this deferral was submitted before, reuse mapping
+      // Determine deferral number (1..3)
       const existingMapping = await tx
         .select()
         .from(workOrderDeferrals)
@@ -124,10 +137,19 @@ export async function POST(req: Request, ctx: Ctx) {
         if (next > 3) {
           throw Object.assign(
             new Error("This work order already has 3 deferrals"),
-            {
-              status: 400,
-            },
+            { status: 400 },
           );
+        }
+
+        if (next >= 2 && !confirmDuplicate) {
+          const dupErr = new Error("DUPLICATE_CONFIRMATION_REQUIRED") as any;
+          dupErr.status = 409;
+          dupErr.duplicateRank = next;
+          dupErr.humanMessage =
+            next === 2
+              ? "A previous deferral already exists for this work order. Confirm to create a second deferral."
+              : "Previous deferrals already exist for this work order. Confirm to create another deferral.";
+          throw dupErr;
         }
 
         await tx.insert(workOrderDeferrals).values({
@@ -140,13 +162,13 @@ export async function POST(req: Request, ctx: Ctx) {
         deferralNumber = next;
       }
 
-      // 3) Compute RAM derived fields
+      // Compute RAM
       const severity = Number(def.severity ?? 1);
       const likelihood = String(def.likelihood ?? "A").toUpperCase();
       const ramCell = computeRamCell(severity, likelihood);
       const ramLevel = computeRamConsequence(severity, likelihood);
 
-      // 4) Update deferral: set IN_APPROVAL, clear returned fields, set new cycle
+      // Update deferral status
       await tx
         .update(deferrals)
         .set({
@@ -163,7 +185,7 @@ export async function POST(req: Request, ctx: Ctx) {
         } as any)
         .where(eq(deferrals.id, deferralId));
 
-      // 5) Resolve gmGroup for department
+      // Resolve GM group
       const deptRaw = (def.initiatorDepartment ?? "").trim();
       const deptNorm = normalizeDepartment(deptRaw);
 
@@ -195,21 +217,44 @@ export async function POST(req: Request, ctx: Ctx) {
       if (!gmGroup) {
         throw Object.assign(
           new Error(`No responsible GM mapping for department="${deptRaw}"`),
-          {
-            status: 400,
-          },
+          { status: 400 },
         );
       }
 
-      // 6) Rebuild approvals from scratch for this NEW cycle
-      // ✅ keep history: DO NOT delete old cycles
+      // Build base approval steps
       const steps = buildApprovalSteps({
         deferralNumber,
         requiresTechnicalAuthority: Boolean(def.requiresTechnicalAuthority),
         requiresAdHoc: Boolean(def.requiresAdHoc),
       });
 
-      for (const s of steps) {
+      // Find the stepOrder of the initiator DH step (stepOrder 1 = first step)
+      const dhStep = steps.find((s) => s.stepRole === "DEPARTMENT_HEAD");
+      const dhOrder = dhStep?.stepOrder ?? 1;
+
+      // Collect mitigation departments that differ from initiator department
+      const mitigationDepts = [
+        ...new Set(
+          mitigationRows
+            .map((m) => m.requiredDepartment?.trim())
+            .filter((d): d is string => !!d)
+            .filter(
+              (d) => normalizeDepartment(d) !== normalizeDepartment(deptRaw),
+            ),
+        ),
+      ];
+
+      // Shift all steps AFTER the initiator DH step up by 1 to make room for mitigation DHs
+      const mitigationShift = mitigationDepts.length > 0 ? 1 : 0;
+
+      const adjustedSteps = steps.map((s) => ({
+        ...s,
+        stepOrder:
+          s.stepOrder > dhOrder ? s.stepOrder + mitigationShift : s.stepOrder,
+      }));
+
+      // Insert adjusted base steps
+      for (const s of adjustedSteps) {
         await tx.insert(deferralApprovals).values({
           id: randomUUID(),
           deferralId,
@@ -226,11 +271,44 @@ export async function POST(req: Request, ctx: Ctx) {
           targetGmGroup: s.stepRole === "RESPONSIBLE_GM" ? gmGroup : null,
         } as any);
       }
+
+      // Insert ALL mitigation DH steps at the SAME stepOrder (parallel)
+      for (let i = 0; i < mitigationDepts.length; i++) {
+        await tx.insert(deferralApprovals).values({
+          id: randomUUID(),
+          deferralId,
+          cycle: newCycle,
+          stepOrder: dhOrder + 1, // same order = parallel
+          stepRole: "DEPARTMENT_HEAD",
+          status: "PENDING",
+          isActive: false,
+          comment: "",
+          signatureUrlSnapshot: "",
+          signedByNameSnapshot: "",
+          assignedUserId: null,
+          targetDepartment: mitigationDepts[i],
+          targetGmGroup: null,
+        } as any);
+      }
     });
 
     await activateFirstStep(deferralId);
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (err: any) {
+    if (
+      err?.status === 409 &&
+      err?.message === "DUPLICATE_CONFIRMATION_REQUIRED"
+    ) {
+      return NextResponse.json(
+        {
+          needsDuplicateConfirmation: true,
+          duplicateRank: err.duplicateRank,
+          message: err.humanMessage,
+        },
+        { status: 409 },
+      );
+    }
+
     return NextResponse.json(
       {
         message: err?.status === 403 ? "Permission denied" : "Server error",

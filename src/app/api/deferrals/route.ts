@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import { db } from "@/src/db";
 import { deferrals, workOrderDeferrals } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
-import { and, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import { computeRamCell, computeRamConsequence } from "@/src/lib/constants";
 
 const ACTIVE_STATUSES = [
@@ -14,7 +14,14 @@ const ACTIVE_STATUSES = [
   "RETURNED",
 ] as const;
 
-const HISTORY_STATUSES = ["COMPLETED", "APPROVED", "REJECTED"] as const;
+const HISTORY_STATUSES = [
+  "COMPLETED",
+  "APPROVED",
+  "REJECTED",
+  "CLOSED",
+  "DELETED",
+  "EXPIRED",
+] as const;
 const ALL_STATUSES = [...ACTIVE_STATUSES, ...HISTORY_STATUSES] as const;
 
 const zNullableDateString = z.preprocess((v) => {
@@ -303,6 +310,30 @@ export async function GET(req: Request) {
       third: 0,
     };
 
+    const now = new Date();
+    const rankActiveRows = await db
+      .select({
+        deferralNumber: workOrderDeferrals.deferralNumber,
+        count: sql<number>`count(*)`.mapWith(Number),
+      })
+      .from(deferrals)
+      .leftJoin(
+        workOrderDeferrals,
+        eq(workOrderDeferrals.deferralId, deferrals.id),
+      )
+      .where(and(baseWhere as any, gt(deferrals.lafdEndDate, now)))
+      .groupBy(workOrderDeferrals.deferralNumber);
+
+    const byDeferralRankActive = { first: 0, second: 0, third: 0 };
+    for (const r of rankActiveRows) {
+      if (r.deferralNumber === 1)
+        byDeferralRankActive.first = Number(r.count ?? 0);
+      if (r.deferralNumber === 2)
+        byDeferralRankActive.second = Number(r.count ?? 0);
+      if (r.deferralNumber === 3)
+        byDeferralRankActive.third = Number(r.count ?? 0);
+    }
+
     for (const r of rankRows) {
       if (r.deferralNumber === 1) byDeferralRank.first = Number(r.count ?? 0);
       if (r.deferralNumber === 2) byDeferralRank.second = Number(r.count ?? 0);
@@ -327,6 +358,7 @@ export async function GET(req: Request) {
             HISTORY_STATUSES.reduce((sum, s) => sum + (byStatus[s] ?? 0), 0),
         },
         totalMatched,
+        byDeferralRankActive,
       },
       { status: 200 },
     );

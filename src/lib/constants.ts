@@ -13,6 +13,24 @@ export const USER_ROLES = [
   "ADMIN",
 ] as const;
 
+
+export const DEPARTMENTS = [
+  "Electrical",
+  "Mechanical",
+  "Instrument",
+  "Turbo",
+  "Civil",
+  "HVAC",
+  "Telecom",
+  "Condition Monitoring",
+  "Inspection",
+  "Painting",
+  "Subsea Control",
+  "Production",
+] as const;
+
+export type Department = (typeof DEPARTMENTS)[number];
+
 export type UserRole = (typeof USER_ROLES)[number];
 
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
@@ -38,6 +56,9 @@ export const DEFERRAL_STATUS = [
   "REJECTED",
   "APPROVED",
   "COMPLETED",
+  "CLOSED", // ✅ mod #3
+  "DELETED", // ✅ mod #4
+  "EXPIRED", // ✅ mod #6
 ] as const;
 
 export type DeferralStatus = (typeof DEFERRAL_STATUS)[number];
@@ -50,6 +71,9 @@ export const STATUS_LABELS: Record<DeferralStatus, string> = {
   REJECTED: "Rejected",
   APPROVED: "Approved",
   COMPLETED: "Completed",
+  CLOSED: "Closed",
+  DELETED: "Deleted",
+  EXPIRED: "Expired",
 };
 
 export const STATUS_COLORS: Record<DeferralStatus, string> = {
@@ -60,9 +84,17 @@ export const STATUS_COLORS: Record<DeferralStatus, string> = {
   REJECTED: "bg-red-300 text-red-900",
   APPROVED: "bg-green-100 text-green-900",
   COMPLETED: "bg-green-400 text-emerald-900",
+  CLOSED: "bg-teal-100 text-teal-900",
+  DELETED: "bg-zinc-300 text-zinc-800",
+  EXPIRED: "bg-orange-200 text-orange-900",
 };
 
-export const RISK_CATEGORIES = ["PEOPLE", "ENVIRONMENT", "FINANCIAL", "REPUTATION"] as const;
+export const RISK_CATEGORIES = [
+  "PEOPLE",
+  "ENVIRONMENT",
+  "FINANCIAL",
+  "REPUTATION",
+] as const;
 
 export const SEVERITY_LEVELS = [1, 2, 3, 4, 5] as const;
 export const LIKELIHOOD_LEVELS = ["A", "B", "C", "D", "E"] as const;
@@ -75,26 +107,36 @@ export const ALLOWED_FILE_TYPES = [
 
 export const MAX_FILE_SIZE = Number(process.env.MAX_FILE_SIZE ?? 5242880);
 
-
-
-export const RAM_CONSEQUENCE_LEVELS = ["Slight", "Minor", "Moderate", "Major", "Massive"] as const;
+export const RAM_CONSEQUENCE_LEVELS = [
+  "Slight",
+  "Minor",
+  "Moderate",
+  "Major",
+  "Massive",
+] as const;
 export type RamConsequenceLevel = (typeof RAM_CONSEQUENCE_LEVELS)[number];
 
 // Mock consequence matrix (you will adjust later):
 // Indexed by severity 1..5 and likelihood A..E
-export const RAM_CONSEQUENCE_MATRIX: Record<number, Record<string, RamConsequenceLevel>> = {
-  1: { A: "Slight",   B: "Slight",   C: "Minor",    D: "Minor",    E: "Moderate" },
-  2: { A: "Slight",   B: "Minor",    C: "Minor",    D: "Moderate", E: "Major" },
-  3: { A: "Minor",    B: "Minor",    C: "Moderate", D: "Major",    E: "Major" },
-  4: { A: "Minor",    B: "Moderate", C: "Major",    D: "Major",    E: "Massive" },
-  5: { A: "Moderate", B: "Major",    C: "Major",    D: "Massive",  E: "Massive" },
+export const RAM_CONSEQUENCE_MATRIX: Record<
+  number,
+  Record<string, RamConsequenceLevel>
+> = {
+  1: { A: "Slight", B: "Slight", C: "Minor", D: "Minor", E: "Moderate" },
+  2: { A: "Slight", B: "Minor", C: "Minor", D: "Moderate", E: "Major" },
+  3: { A: "Minor", B: "Minor", C: "Moderate", D: "Major", E: "Major" },
+  4: { A: "Minor", B: "Moderate", C: "Major", D: "Major", E: "Massive" },
+  5: { A: "Moderate", B: "Major", C: "Major", D: "Massive", E: "Massive" },
 };
 
 export function computeRamCell(severity: number, likelihood: string) {
   return `${severity}${likelihood}`; // e.g. 3C
 }
 
-export function computeRamConsequence(severity: number, likelihood: string): RamConsequenceLevel {
+export function computeRamConsequence(
+  severity: number,
+  likelihood: string,
+): RamConsequenceLevel {
   const s = Math.min(5, Math.max(1, Number(severity))) as 1 | 2 | 3 | 4 | 5;
   const l = String(likelihood ?? "A").toUpperCase();
   return RAM_CONSEQUENCE_MATRIX[s]?.[l] ?? "Slight";

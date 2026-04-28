@@ -5,7 +5,7 @@ import { api } from "@/src/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SignatureStamp } from "@/src/components/deferral/SignatureStamp";
-import { USER_ROLE_LABELS } from "@/src/lib/constants";
+import { formatStepRole } from "@/src/lib/helper";
 
 type Approval = {
   id: string;
@@ -18,19 +18,24 @@ type Approval = {
   signedAt: string | null;
   signatureUrlSnapshot: string;
   signedByNameSnapshot?: string; // new field
+  targetDepartment?: string | null;
+  
 };
 
 type ApiResponse = {
   approvals: Approval[];
   parallelCounts: { total: number; approved: number; pending: number };
-  counts: { total: number; approved: number; rejected: number; pending: number; active: number };
+  counts: {
+    total: number;
+    approved: number;
+    rejected: number;
+    pending: number;
+    active: number;
+  };
 };
 
 const PARALLEL_GROUP = new Set(["RESPONSIBLE_GM", "SOD", "DFGM"]);
 
-function roleLabel(role: string) {
-  return (USER_ROLE_LABELS as any)[role] ?? role;
-}
 
 export function ApprovalTimeline({ deferralId }: { deferralId: string }) {
   const [data, setData] = useState<ApiResponse | null>(null);
@@ -39,7 +44,9 @@ export function ApprovalTimeline({ deferralId }: { deferralId: string }) {
   async function load() {
     setErr(null);
     try {
-      const res = await api<ApiResponse>(`/api/deferrals/${deferralId}/approvals`);
+      const res = await api<ApiResponse>(
+        `/api/deferrals/${deferralId}/approvals`,
+      );
       setData(res);
     } catch (e: any) {
       setErr(e.message ?? "Failed to load approvals");
@@ -93,7 +100,19 @@ export function ApprovalTimeline({ deferralId }: { deferralId: string }) {
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-2">
-                        <div className="font-medium">{roleLabel(a.stepRole)}</div>
+                        <div className="font-medium">
+                          {formatStepRole(a.stepRole)}
+                          {a.targetDepartment && (
+                            <div className="text-xs text-muted-foreground">
+                              {a.targetDepartment}
+                            </div>
+                          )}
+                          {a.signedByNameSnapshot && (
+                            <div className="text-xs text-muted-foreground">
+                              by {a.signedByNameSnapshot}
+                            </div>
+                          )}
+                        </div>
                         <Badge variant="outline">{a.status}</Badge>
                         {a.isActive && <Badge>Active</Badge>}
                       </div>
@@ -126,7 +145,8 @@ export function ApprovalTimeline({ deferralId }: { deferralId: string }) {
                 <div className="flex items-center justify-between">
                   <div className="font-medium">Parallel Sign-off Group</div>
                   <div className="text-xs text-muted-foreground">
-                    {data.parallelCounts.approved}/{data.parallelCounts.total} completed
+                    {data.parallelCounts.approved}/{data.parallelCounts.total}{" "}
+                    completed
                   </div>
                 </div>
 
@@ -135,7 +155,9 @@ export function ApprovalTimeline({ deferralId }: { deferralId: string }) {
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <div className="flex items-center gap-2">
-                          <div className="text-sm font-medium">{roleLabel(a.stepRole)}</div>
+                          <div className="text-sm font-medium">
+                            {formatStepRole(a.stepRole)}
+                          </div>
                           <Badge variant="outline">{a.status}</Badge>
                           {a.isActive && <Badge>Active</Badge>}
                         </div>
