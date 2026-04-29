@@ -4,19 +4,21 @@
 import { NextResponse } from "next/server";
 import React from "react";
 import { renderToBuffer } from "@react-pdf/renderer";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/src/db";
 import {
   deferrals,
   deferralRisks,
   deferralApprovals,
+  deferralMitigations,
   users,
 } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
 import {
   DeferralPdfDoc,
   type PdfApprovalRow,
+  type PdfMitigationRow,
   type PdfRiskRow,
   type PdfDeferral,
 } from "@/src/lib/pdf/DeferralPdf";
@@ -154,6 +156,52 @@ export async function GET(_req: Request, ctx: Ctx) {
     }),
   );
 
+  const normalizeDepartment = (value: string | null | undefined) =>
+    String(value ?? "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toLowerCase();
+  const initiatorDeptKey = normalizeDepartment(d.initiatorDepartment);
+
+  const approvalByDepartment = new Map<string, PdfApprovalRow>();
+  approvalsSorted.forEach((a: any, index: number) => {
+    if (String(a.stepRole) !== "DEPARTMENT_HEAD") return;
+    const deptKey = normalizeDepartment(a.targetDepartment);
+    if (!deptKey) return;
+    if (!approvalByDepartment.has(deptKey)) {
+      approvalByDepartment.set(deptKey, approvals[index]);
+    }
+  });
+
+  const approvalsForTable = approvals.filter((_, index) => {
+    const rawApproval = approvalsSorted[index];
+    if (String(rawApproval.stepRole) !== "DEPARTMENT_HEAD") return true;
+
+    const deptKey = normalizeDepartment(rawApproval.targetDepartment);
+    return !deptKey || deptKey === initiatorDeptKey;
+  });
+
+  const mitigationRowsDb = await db
+    .select()
+    .from(deferralMitigations)
+    .where(eq(deferralMitigations.deferralId, deferralId))
+    .orderBy(asc(deferralMitigations.createdAt));
+
+  const mitigationRows: PdfMitigationRow[] = mitigationRowsDb.map((m) => {
+    const approval = approvalByDepartment.get(
+      normalizeDepartment(m.requiredDepartment),
+    );
+
+    return {
+      mitigationText: String(m.description ?? ""),
+      requiredDepartment: String(m.requiredDepartment ?? ""),
+      signatureDataUri: approval?.signatureDataUri ?? null,
+      approverName: approval?.signerName ?? "",
+      signedAt: approval?.signedAt ?? null,
+      comment: approval?.comment ?? "",
+    };
+  });
+
   const deferral: PdfDeferral = {
     deferralCode: d.deferralCode,
 
@@ -184,11 +232,13 @@ export async function GET(_req: Request, ctx: Ctx) {
   const element = React.createElement(DeferralPdfDoc, {
     deferral,
     risks,
-    approvals,
-  });
+    mitigationRows,
+    approvals: approvalsForTable,
+  }) as Parameters<typeof renderToBuffer>[0];
   const pdf = await renderToBuffer(element);
+  const body = new Uint8Array(pdf);
 
-  return new NextResponse(pdf, {
+  return new NextResponse(body, {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/src/db";
 import { deferrals, workOrderDeferrals } from "@/src/db/schema";
-import { getBusinessProfile } from "@/src/lib/authz";
+import { getBusinessProfile, type BusinessProfile } from "@/src/lib/authz";
 import { and, desc, eq, gte, ilike, inArray, lte } from "drizzle-orm";
 import { STATUS_LABELS } from "@/src/lib/constants";
 
@@ -22,11 +22,11 @@ const ACTIVE_STATUSES = [
   "DRAFT",
   "SUBMITTED",
   "IN_APPROVAL",
+  "APPROVED",
   "RETURNED",
 ] as const;
 const HISTORY_STATUSES = [
   "COMPLETED",
-  "APPROVED",
   "REJECTED",
   "CLOSED",
   "DELETED",
@@ -37,6 +37,17 @@ function scopeStatuses(scope: string) {
   if (scope === "active") return ACTIVE_STATUSES;
   if (scope === "history") return HISTORY_STATUSES;
   return [...ACTIVE_STATUSES, ...HISTORY_STATUSES];
+}
+
+function effectiveDepartmentFilter(
+  profile: BusinessProfile,
+  requestedDepartment: string,
+) {
+  if (profile.role === "ENGINEER_APPLICANT") {
+    return String(profile.department ?? "").trim();
+  }
+
+  return String(requestedDepartment ?? "").trim();
 }
 
 function csvEscape(value: unknown) {
@@ -99,8 +110,10 @@ export async function GET(req: Request) {
   if (f.status) clauses.push(eq(deferrals.status, f.status as any));
   else clauses.push(inArray(deferrals.status, scopeStatuses(f.scope) as any));
 
-  if (f.department.trim()) {
-    clauses.push(eq(deferrals.initiatorDepartment, f.department.trim()));
+  const effectiveDepartment = effectiveDepartmentFilter(profile, f.department);
+
+  if (effectiveDepartment) {
+    clauses.push(eq(deferrals.initiatorDepartment, effectiveDepartment));
   }
   if (f.deferralCode.trim()) {
     clauses.push(ilike(deferrals.deferralCode, `%${f.deferralCode.trim()}%`));

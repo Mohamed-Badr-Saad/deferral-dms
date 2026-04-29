@@ -3,7 +3,7 @@ import { z } from "zod";
 import { randomUUID } from "crypto";
 import { db } from "@/src/db";
 import { deferrals, workOrderDeferrals } from "@/src/db/schema";
-import { getBusinessProfile } from "@/src/lib/authz";
+import { getBusinessProfile, type BusinessProfile } from "@/src/lib/authz";
 import { and, desc, eq, gt, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import { computeRamCell, computeRamConsequence } from "@/src/lib/constants";
 
@@ -11,12 +11,12 @@ const ACTIVE_STATUSES = [
   "DRAFT",
   "SUBMITTED",
   "IN_APPROVAL",
+  "APPROVED",
   "RETURNED",
 ] as const;
 
 const HISTORY_STATUSES = [
   "COMPLETED",
-  "APPROVED",
   "REJECTED",
   "CLOSED",
   "DELETED",
@@ -78,8 +78,19 @@ function scopeStatuses(scope: "active" | "history" | "all") {
   return ALL_STATUSES as unknown as string[];
 }
 
+function effectiveDepartmentFilter(
+  profile: BusinessProfile,
+  requestedDepartment: string,
+) {
+  if (profile.role === "ENGINEER_APPLICANT") {
+    return String(profile.department ?? "").trim();
+  }
+
+  return String(requestedDepartment ?? "").trim();
+}
+
 function buildWhereClause(args: {
-  profile: any;
+  profile: BusinessProfile;
   scope: "active" | "history" | "all";
   department: string;
   status?: string;
@@ -88,9 +99,10 @@ function buildWhereClause(args: {
   equipmentTag: string;
   updatedFrom?: string;
   updatedTo?: string;
-  deferralRank?: 1 | 2 | 3;
+  deferralRank?: number;
 }) {
   const {
+    profile,
     scope,
     department,
     status,
@@ -107,7 +119,7 @@ function buildWhereClause(args: {
   if (status) clauses.push(eq(deferrals.status, status as any));
   else clauses.push(inArray(deferrals.status, scopeStatuses(scope) as any));
 
-  const dept = (department ?? "").trim();
+  const dept = effectiveDepartmentFilter(profile, department);
   if (dept) clauses.push(eq(deferrals.initiatorDepartment, dept));
 
   const code = (deferralCode ?? "").trim();

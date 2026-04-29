@@ -57,7 +57,6 @@ export default function ApprovalsPage() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const pending = useMemo(() => data?.pending ?? [], [data]);
@@ -100,11 +99,11 @@ export default function ApprovalsPage() {
     }
   }
 
-  async function refuse(approvalId: string) {
+  async function returnForRevision(approvalId: string) {
     const c = (comment[approvalId] ?? "").trim();
     if (c.length < 2) {
       toast("Validation error", {
-        description: "Comment is required to reject.",
+        description: "Comment is required to return the deferral.",
       });
       return;
     }
@@ -113,12 +112,40 @@ export default function ApprovalsPage() {
     try {
       await api<{ ok: boolean }>(`/api/approvals/${approvalId}/return`, {
         method: "POST",
-        json: { comment: c, route: "TO_RELIABILITY_ENGINEER" },
+        json: { comment: c },
+      });
+
+      toast("Returned", {
+        description: "Deferral returned to the initiator for revision.",
+      });
+
+      setComment((x) => ({ ...x, [approvalId]: "" }));
+      await load();
+    } catch (e: any) {
+      toast("Error", { description: e.message ?? "Return failed" });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function rejectCompletely(approvalId: string) {
+    const c = (comment[approvalId] ?? "").trim();
+    if (c.length < 2) {
+      toast("Validation error", {
+        description: "Comment is required to reject the deferral completely.",
+      });
+      return;
+    }
+
+    setBusyId(approvalId);
+    try {
+      await api<{ ok: boolean }>(`/api/approvals/${approvalId}/reject`, {
+        method: "POST",
+        json: { comment: c },
       });
 
       toast("Rejected", {
-        description:
-          "Deferral rejected and returned to Reliability Engineer + Initiator.",
+        description: "Deferral rejected completely and cannot be resubmitted.",
       });
 
       setComment((x) => ({ ...x, [approvalId]: "" }));
@@ -184,7 +211,8 @@ export default function ApprovalsPage() {
                   setComment((c) => ({ ...c, [id]: val }))
                 }
                 onApprove={approve}
-                onRefuse={refuse}
+                onReturn={returnForRevision}
+                onReject={rejectCompletely}
                 onSaved={async () => {
                   await load();
                   router.refresh();
@@ -223,7 +251,8 @@ export default function ApprovalsPage() {
                     setComment((c) => ({ ...c, [id]: val }))
                   }
                   onApprove={approve}
-                  onRefuse={refuse}
+                  onReturn={returnForRevision}
+                  onReject={rejectCompletely}
                   onSaved={async () => {
                     await load();
                     router.refresh();

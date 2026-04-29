@@ -2,13 +2,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import Link from "next/link";
-import { ApprovalRow, Profile, ApiRes } from "./types";
+import { ApprovalRow, Profile } from "./types";
 import { Badge } from "@/components/ui/badge";
-import { USER_ROLE_LABELS } from "@/src/lib/constants";
 import { StatusPill } from "@/src/components/deferral/StatusPill";
 import {
   GmDecisionPanel,
-  type ApprovalStatus,
 } from "@/src/components/deferral/GmDecisionPanel";
 import { formatStepRole } from "@/src/lib/helper";
 
@@ -21,7 +19,8 @@ export function ApprovalCard({
   parallelCounts,
   onCommentChange,
   onApprove,
-  onRefuse,
+  onReturn,
+  onReject,
   onSaved,
 }: {
   row: ApprovalRow;
@@ -32,7 +31,8 @@ export function ApprovalCard({
   parallelCounts?: { total: number; approved: number; pending: number };
   onCommentChange: (id: string, value: string) => void;
   onApprove: (id: string) => void;
-  onRefuse: (id: string) => void;
+  onReturn: (id: string) => void;
+  onReject: (id: string) => void;
   onSaved: () => Promise<void>;
 }) {
   const p = parallelCounts;
@@ -129,7 +129,7 @@ export function ApprovalCard({
 
         <div className="space-y-2">
           <div className="text-xs text-muted-foreground">
-            Comment (optional for approve, required for reject)
+            Comment (optional for approve, required for return/reject)
           </div>
           <Textarea
             value={comment}
@@ -147,18 +147,26 @@ export function ApprovalCard({
           </Button>
 
           <Button
-            variant="destructive"
-            onClick={() => onRefuse(row.approval.id)}
+            variant="outline"
+            onClick={() => onReturn(row.approval.id)}
             disabled={busyId === row.approval.id}
           >
-            {busyId === row.approval.id ? "Working..." : "Reject & Return"}
+            {busyId === row.approval.id ? "Working..." : "Return to Initiator"}
+          </Button>
+
+          <Button
+            variant="destructive"
+            onClick={() => onReject(row.approval.id)}
+            disabled={busyId === row.approval.id}
+          >
+            {busyId === row.approval.id ? "Working..." : "Reject Completely"}
           </Button>
         </div>
 
         <div className="text-xs text-muted-foreground">
-          Rejecting will mark the deferral as{" "}
-          <span className="font-medium">REJECTED</span> and return it to the
-          Reliability Engineer and the initiator.
+          Returning sends the deferral back to the initiator for revision.
+          Rejecting completely marks it as{" "}
+          <span className="font-medium">REJECTED</span> and blocks resubmission.
         </div>
       </CardContent>
     </Card>

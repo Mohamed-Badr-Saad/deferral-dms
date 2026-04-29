@@ -1,16 +1,22 @@
 import { NextResponse } from "next/server";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
+import path from "path";
+import { promises as fs } from "fs";
 import { db } from "@/src/db";
 import {
   deferrals,
   deferralApprovals,
+  deferralAttachments,
   deferralMitigations,
+  deferralRisks,
   notifications,
   users,
   workOrderDeferrals,
 } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
 import { z } from "zod";
+
+export const runtime = "nodejs";
 
 const MitigationInputSchema = z.object({
   id: z.string().optional(),
@@ -169,18 +175,6 @@ async function getWorkOrderLink(deferralId: string) {
     .limit(1);
 
   return rows[0] ?? null;
-}
-
-async function markNotificationsFulfilled(deferralId: string) {
-  await db
-    .update(notifications)
-    .set({ readAt: new Date() })
-    .where(
-      and(
-        eq(notifications.deferralId, deferralId),
-        isNull(notifications.readAt),
-      ),
-    );
 }
 
 async function buildDeferralResponse(id: string) {
@@ -379,17 +373,50 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     );
   }
 
-  await db
-    .delete(deferralApprovals)
-    .where(eq(deferralApprovals.deferralId, id));
-  await db
-    .delete(deferralMitigations)
-    .where(eq(deferralMitigations.deferralId, id));
-  await db.delete(notifications).where(eq(notifications.deferralId, id));
-  await db
-    .delete(workOrderDeferrals)
-    .where(eq(workOrderDeferrals.deferralId, id));
-  await db.delete(deferrals).where(eq(deferrals.id, id));
+  const attachmentRows = await db
+    .select({ filePath: deferralAttachments.filePath })
+    .from(deferralAttachments)
+    .where(eq(deferralAttachments.deferralId, id));
+
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(deferralApprovals)
+      .where(eq(deferralApprovals.deferralId, id));
+    await tx
+      .delete(deferralAttachments)
+      .where(eq(deferralAttachments.deferralId, id));
+    await tx
+      .delete(deferralMitigations)
+      .where(eq(deferralMitigations.deferralId, id));
+    await tx.delete(deferralRisks).where(eq(deferralRisks.deferralId, id));
+    await tx.delete(notifications).where(eq(notifications.deferralId, id));
+    await tx
+      .delete(workOrderDeferrals)
+      .where(eq(workOrderDeferrals.deferralId, id));
+    await tx.delete(deferrals).where(eq(deferrals.id, id));
+  });
+
+  for (const attachment of attachmentRows) {
+    try {
+      const fullPath = path.join(
+        process.cwd(),
+        "public",
+        attachment.filePath.replace(/^\//, ""),
+      );
+      await fs.unlink(fullPath);
+    } catch {
+      // Best-effort cleanup only. Database delete already succeeded.
+    }
+  }
+
+  try {
+    await fs.rm(
+      path.join(process.cwd(), "public", "uploads", "deferrals", id),
+      { recursive: true, force: true },
+    );
+  } catch {
+    // ignore directory cleanup errors
+  }
 
   return NextResponse.json({ ok: true }, { status: 200 });
 }

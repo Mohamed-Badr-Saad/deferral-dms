@@ -41,6 +41,7 @@ export type Deferral = {
   updatedAt: string;
   createdAt?: string;
 
+  deletedReason?: string | null;
   returnedAt?: string;
   returnedByRole?: string;
   returnedComment?: string;
@@ -52,6 +53,7 @@ export type Profile = {
   name: string;
   department: string;
   position: string;
+  gmGroup?: string | null;
 };
 
 export type ApprovalRow = {
@@ -62,6 +64,9 @@ export type ApprovalRow = {
   status: ApprovalStatus;
   isActive: boolean;
   comment: string;
+  assignedUserId?: string | null;
+  targetDepartment?: string | null;
+  targetGmGroup?: string | null;
   signedAt: string | null;
 };
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/src/db";
-import { deferralApprovals, deferrals } from "@/src/db/schema";
+import { deferralApprovals, deferrals, users } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
 import { and, eq } from "drizzle-orm";
 import { notifyUser } from "@/src/lib/approval-progress";
@@ -113,9 +113,12 @@ export async function POST(req: Request, ctx: Ctx) {
     effectiveApproval = latest[0] as any;
   }
 
-  if (def.status !== "IN_APPROVAL") {
+  if (def.status !== "IN_APPROVAL" && def.status !== "APPROVED") {
     return NextResponse.json(
-      { message: "Validation error", detail: "Deferral is not in approval." },
+      {
+        message: "Validation error",
+        detail: "Deferral is not awaiting an approval action.",
+      },
       { status: 400 },
     );
   }
@@ -135,18 +138,28 @@ export async function POST(req: Request, ctx: Ctx) {
   }
 
   // ✅ Transaction: mark current approval rejected + deactivate cycle + return deferral
+  const signerRows = await db
+    .select({ name: users.name, signatureUrl: users.signatureUrl })
+    .from(users)
+    .where(eq(users.id, profile.id))
+    .limit(1);
+
+  const signerName = signerRows[0]?.name ?? profile.name ?? "";
+  const signatureUrl = (signerRows[0] as any)?.signatureUrl ?? "";
+
   await db.transaction(async (tx) => {
     // IMPORTANT FIX: use effectiveApproval.id not approvalId
     await tx
       .update(deferralApprovals)
       .set({
-        status: "REJECTED",
+        status: "RETURNED",
         comment: parsed.data.comment,
         isActive: false,
         updatedAt: new Date(),
-        signedAt: new Date(), // optional: keep for audit
+        signedAt: new Date(),
         signedByUserId: profile.id,
-        signedByNameSnapshot: profile.name ?? "",
+        signedByNameSnapshot: signerName,
+        signatureUrlSnapshot: signatureUrl,
       } as any)
       .where(eq(deferralApprovals.id, effectiveApproval.id));
 
@@ -178,7 +191,7 @@ export async function POST(req: Request, ctx: Ctx) {
   await notifyUser(
     def.initiatorUserId,
     "Deferral returned for revision",
-    `${formatStepRole(effectiveApproval.stepRole)} returned your deferral(By: ${profile.name}).\n Comment: ${parsed.data.comment}`,
+    `${formatStepRole(effectiveApproval.stepRole)} returned your deferral for revision (By: ${signerName}).\nComment: ${parsed.data.comment}`,
     def.id,
   );
 

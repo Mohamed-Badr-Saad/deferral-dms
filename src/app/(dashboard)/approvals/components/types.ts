@@ -4,7 +4,7 @@ export type ApprovalRow = {
     deferralId: string;
     stepRole: string;
     stepOrder: number;
-    status: "PENDING" | "APPROVED" | "REJECTED" | "SKIPPED";
+    status: "PENDING" | "APPROVED" | "RETURNED" | "REJECTED" | "SKIPPED";
     isActive: boolean;
     comment: string;
     signedAt: string | null;

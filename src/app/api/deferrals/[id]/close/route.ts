@@ -26,11 +26,11 @@ export async function POST(_req: Request, ctx: Ctx) {
   if (item.initiatorUserId !== profile.id)
     return NextResponse.json({ message: "Permission denied" }, { status: 403 });
 
-  if (item.status !== "APPROVED" && item.status !== "COMPLETED")
+  if (item.status !== "COMPLETED")
     return NextResponse.json(
       {
         message: "Validation error",
-        detail: "Only APPROVED or COMPLETED deferrals can be closed.",
+        detail: "Only COMPLETED deferrals can be closed.",
       },
       { status: 400 },
     );

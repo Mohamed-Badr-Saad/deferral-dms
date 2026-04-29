@@ -29,12 +29,13 @@ export async function GET(_req: Request, ctx: Ctx) {
     .where(and(eq(deferralApprovals.deferralId, deferralId)))
     .orderBy(asc(deferralApprovals.cycle), asc(deferralApprovals.stepOrder));
 
-  // only rejected events (returns)
-  const rejected = rows
-    .filter((r: any) => r.status === "REJECTED")
+  // return/reject events only
+  const decisionEvents = rows
+    .filter((r: any) => r.status === "REJECTED" || r.status === "RETURNED")
     .map((r: any) => ({
       cycle: r.cycle,
       stepRole: r.stepRole,
+      status: r.status,
       comment: r.comment,
       signedAt: r.signedAt,
       updatedAt: r.updatedAt,
@@ -46,5 +47,5 @@ export async function GET(_req: Request, ctx: Ctx) {
       return bd - ad;
     });
 
-  return NextResponse.json({ items: rejected }, { status: 200 });
+  return NextResponse.json({ items: decisionEvents }, { status: 200 });
 }

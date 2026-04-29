@@ -7,7 +7,7 @@ import {
   StyleSheet,
   Image,
 } from "@react-pdf/renderer";
-import { IMAGES, IMAGES_BASE64_CODE } from "../assets";
+import { IMAGES_BASE64_CODE } from "../assets";
 import { formatStepRole } from "../helper";
 
 export type PdfDeferral = {
@@ -56,6 +56,15 @@ export type PdfApprovalRow = {
 
   // ✅ NEW: already-resolved, fetch-safe image for react-pdf
   signatureDataUri?: string | null;
+};
+
+export type PdfMitigationRow = {
+  mitigationText: string;
+  requiredDepartment: string;
+  signatureDataUri?: string | null;
+  approverName: string;
+  signedAt: Date | null;
+  comment: string;
 };
 
 function fmtDate(d: Date | null | undefined) {
@@ -200,12 +209,32 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function SignatureCell(props: {
+  signatureDataUri?: string | null;
+  signerName?: string | null;
+}) {
+  const { signatureDataUri, signerName } = props;
+
+  return (
+    <View style={styles.sigWrap}>
+      {signatureDataUri ? (
+        <Image style={styles.sigImg} src={signatureDataUri} />
+      ) : signerName ? (
+        <Text>{`Signed by: ${signerName}`}</Text>
+      ) : (
+        <Text>—</Text>
+      )}
+    </View>
+  );
+}
+
 export function DeferralPdfDoc(props: {
   deferral: PdfDeferral;
   risks: PdfRiskRow[];
+  mitigationRows: PdfMitigationRow[];
   approvals: PdfApprovalRow[];
 }) {
-  const { deferral, risks, approvals } = props;
+  const { deferral, risks, mitigationRows, approvals } = props;
 
   const pickRisk = (cat: PdfRiskRow["category"]) =>
     risks.find((r) => r.category === cat);
@@ -365,6 +394,81 @@ export function DeferralPdfDoc(props: {
 
       <Page size="A4" style={styles.page}>
         <View style={styles.approvalsBand}>
+          <Text>Mitigation Approvals</Text>
+        </View>
+
+        <View style={styles.approvalsTable}>
+          <View style={styles.approvalsHeader}>
+            <Text style={[styles.aCell, { width: "23%", fontWeight: 700 }]}>
+              Department
+            </Text>
+            <Text style={[styles.aCell, { width: "23%", fontWeight: 700 }]}>
+              Mitigation
+            </Text>
+            <Text style={[styles.aCell, { width: "16%", fontWeight: 700 }]}>
+              Name
+            </Text>
+            <Text style={[styles.aCell, { width: "18%", fontWeight: 700 }]}>
+              Signature
+            </Text>
+            <Text style={[styles.aCell, { width: "10%", fontWeight: 700 }]}>
+              Date
+            </Text>
+            <Text
+              style={[
+                styles.aCell,
+                { width: "10%", fontWeight: 700, borderRightWidth: 0 },
+              ]}
+            >
+              Comment
+            </Text>
+          </View>
+
+          {mitigationRows.length === 0 ? (
+            <View style={styles.approvalsRow}>
+              <Text
+                style={[styles.aCell, { width: "100%", borderRightWidth: 0 }]}
+              >
+                No mitigation rows were saved.
+              </Text>
+            </View>
+          ) : (
+            mitigationRows.map((m, idx) => (
+              <View
+                key={`${m.requiredDepartment}-${idx}`}
+                style={styles.approvalsRow}
+              >
+                <Text style={[styles.aCell, { width: "23%" }]}>
+                  {m.requiredDepartment || "—"}
+                </Text>
+                <Text style={[styles.aCell, { width: "23%" }]}>
+                  {m.mitigationText || "—"}
+                </Text>
+                <Text style={[styles.aCell, { width: "16%" }]}>
+                  {m.approverName || "—"}
+                </Text>
+                <View style={[styles.aCell, { width: "18%" }]}>
+                  <SignatureCell
+                    signatureDataUri={m.signatureDataUri}
+                    signerName={m.approverName}
+                  />
+                </View>
+                <Text style={[styles.aCell, { width: "10%" }]}>
+                  {fmtDate(m.signedAt)}
+                </Text>
+                <Text
+                  style={[styles.aCell, { width: "10%", borderRightWidth: 0 }]}
+                >
+                  {m.comment || "—"}
+                </Text>
+              </View>
+            ))
+          )}
+        </View>
+
+        <View style={styles.spacer} />
+
+        <View style={styles.approvalsBand}>
           <Text>Approvals / Signatures</Text>
         </View>
 
@@ -410,15 +514,10 @@ export function DeferralPdfDoc(props: {
 
               {/* ✅ NEW signature column */}
               <View style={[styles.aCell, { width: "18%" }]}>
-                <View style={styles.sigWrap}>
-                  {a.signatureDataUri ? (
-                    <Image style={styles.sigImg} src={a.signatureDataUri} />
-                  ) : a.signerName ? (
-                    <Text>{`Signed by: ${a.signerName}`}</Text>
-                  ) : (
-                    <Text>—</Text>
-                  )}
-                </View>
+                <SignatureCell
+                  signatureDataUri={a.signatureDataUri}
+                  signerName={a.signerName}
+                />
               </View>
 
               <Text style={[styles.aCell, { width: "10%" }]}>

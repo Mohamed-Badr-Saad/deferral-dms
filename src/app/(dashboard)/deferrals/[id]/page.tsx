@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { StatusPill } from "@/src/components/deferral/StatusPill";
 import { ApprovalTimeline } from "@/src/components/deferral/ApprovalTimeline";
 import { SubmitDeferralDialog } from "@/src/components/deferral/SubmitDeferralDialog";
+import { GmDecisionPanel } from "@/src/components/deferral/GmDecisionPanel";
 import { UploadCloud, Save } from "lucide-react";
 import { WorkOrderHistoryTab } from "@/src/components/deferral/WorkOrderHistoryTab";
 import { addDaysIso, formatStepRole } from "@/src/lib/helper";
@@ -69,6 +70,27 @@ const LIKELIHOOD_OPTIONS = [
   { v: "E", label: "E - >1/year at the location" },
 ];
 
+type ViewTab =
+  | "details"
+  | "approvals"
+  | "history"
+  | "deferralHistory"
+  | "print";
+
+const VIEW_TABS = new Set<string>([
+  "details",
+  "approvals",
+  "history",
+  "deferralHistory",
+  "print",
+]);
+
+type EditableMitigationRow = {
+  id?: string;
+  mitigationText: string;
+  requiredDepartment: string;
+};
+
 function addMonths(date: Date, months: number) {
   const d = new Date(date);
   d.setMonth(d.getMonth() + months);
@@ -91,6 +113,40 @@ function fromIsoDateInput(v: string) {
 
 function validateEquipmentCode(v: string) {
   return EQUIPMENT_FULL_CODE_RE.test((v ?? "").trim());
+}
+
+function normalizeText(input: string | null | undefined) {
+  return String(input ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function canActOnApproval(approval: ApprovalRow, profile: Profile | null) {
+  if (!profile) return false;
+  if (!approval.isActive || approval.status !== "PENDING") return false;
+
+  if (approval.assignedUserId && approval.assignedUserId === profile.id) {
+    return true;
+  }
+
+  if (String(profile.role) !== String(approval.stepRole)) return false;
+
+  if (
+    approval.targetDepartment &&
+    normalizeText(approval.targetDepartment) !== normalizeText(profile.department)
+  ) {
+    return false;
+  }
+
+  if (
+    approval.targetGmGroup &&
+    String(approval.targetGmGroup) !== String(profile.gmGroup ?? "")
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 function useDebouncedCallback<T extends (...args: any[]) => void>(
@@ -158,6 +214,10 @@ export default function DeferralDetailsPage() {
       item.initiatorUserId === profile.id
     );
   }, [item, profile]);
+  const isInitiator = useMemo(() => {
+    if (!item || !profile) return false;
+    return item.initiatorUserId === profile.id;
+  }, [item, profile]);
   useEffect(() => {
     if (editMode && !canEditDraft) {
       setEditMode(false);
@@ -185,9 +245,9 @@ export default function DeferralDetailsPage() {
   const [description, setDescription] = useState("");
   const [justification, setJustification] = useState("");
   const [consequence, setConsequence] = useState("");
-  const [mitigationRows, setMitigationRows] = useState<
-    Array<{ id?: string; mitigationText: string; requiredDepartment: string }>
-  >([{ mitigationText: "", requiredDepartment: "" }]);
+  const [mitigationRows, setMitigationRows] = useState<EditableMitigationRow[]>(
+    [{ mitigationText: "", requiredDepartment: "" }],
+  );
 
   const [duplicateInfo, setDuplicateInfo] =
     useState<DuplicateDialogState>(null);
@@ -219,7 +279,16 @@ export default function DeferralDetailsPage() {
       });
 
       if (check.blocked || check.needsConfirmation) {
-        setDuplicateInfo(check);
+        setDuplicateInfo({
+          source: "change",
+          duplicateRank: check.duplicateRank,
+          existingCount: check.existingCount,
+          needsConfirmation: check.needsConfirmation,
+          blocked: check.blocked,
+          message: check.message,
+          workOrderNo: trimmed,
+          workOrderTitle,
+        });
         return;
       }
       setDuplicateInfo(null);
@@ -266,9 +335,8 @@ export default function DeferralDetailsPage() {
     riskRowsRef.current = riskRows;
   }, [riskRows]);
 
-  // --- Risk autosave (debounced) ---
+  // --- Risk save queue ---
   const pendingRiskRef = useRef(false);
-  const riskDebounceRef = useRef<any>(null);
 
   const saveRisksNow = useCallback(
     async (silent?: boolean) => {
@@ -291,6 +359,7 @@ export default function DeferralDetailsPage() {
         );
 
         setRiskRows((res.items ?? []) as any);
+        pendingRiskRef.current = false;
         if (!silent) toast.success("Risks saved");
       } catch (e: any) {
         if (!silent) toast.error(e?.message ?? "Failed to save risks");
@@ -304,19 +373,10 @@ export default function DeferralDetailsPage() {
   const queueRisksSave = useCallback(() => {
     if (!canEditDraft) return; // ✅ ADD
     pendingRiskRef.current = true;
-    if (riskDebounceRef.current) clearTimeout(riskDebounceRef.current);
-
-    riskDebounceRef.current = setTimeout(async () => {
-      if (!pendingRiskRef.current) return;
-      pendingRiskRef.current = false;
-      await saveRisksNow(true); // silent autosave
-    }, 800);
-  }, [saveRisksNow, canEditDraft]);
+  }, [canEditDraft]);
 
   const flushRisksSave = useCallback(async () => {
-    if (riskDebounceRef.current) clearTimeout(riskDebounceRef.current);
     if (!pendingRiskRef.current) return;
-    pendingRiskRef.current = false;
     await saveRisksNow(true);
   }, [saveRisksNow]);
 
@@ -324,9 +384,7 @@ export default function DeferralDetailsPage() {
   const [attLoading, setAttLoading] = useState(false);
   const [historyCount, setHistoryCount] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [viewTab, setViewTab] = useState<"details" | "approvals" | "history">(
-    "details",
-  );
+  const [viewTab, setViewTab] = useState<ViewTab>("details");
 
   const [pendingSubmit, setPendingSubmit] = useState<{
     workOrderNo: string;
@@ -337,6 +395,7 @@ export default function DeferralDetailsPage() {
     {
       cycle: number;
       stepRole: string;
+      status: "RETURNED" | "REJECTED";
       comment: string;
       signedAt: string | null;
       signedByNameSnapshot: string;
@@ -368,6 +427,29 @@ export default function DeferralDetailsPage() {
 
   const gmApprovalStatus = gmApproval?.status ?? null;
   const gmApprovalIsActive = Boolean(gmApproval?.isActive);
+  const [approvalComment, setApprovalComment] = useState("");
+  const [approvalBusy, setApprovalBusy] = useState<
+    "approve" | "return" | "reject" | null
+  >(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [recordActionBusy, setRecordActionBusy] = useState<
+    "close" | "softDelete" | "hardDelete" | null
+  >(null);
+  const [showCloseDialog, setShowCloseDialog] = useState(false);
+  const [showSoftDeleteDialog, setShowSoftDeleteDialog] = useState(false);
+  const [showHardDeleteDialog, setShowHardDeleteDialog] = useState(false);
+
+  const myActiveApproval = useMemo(() => {
+    if (!item || !["IN_APPROVAL", "APPROVED"].includes(item.status)) {
+      return null;
+    }
+    return approvals.find((a) => canActOnApproval(a, profile)) ?? null;
+  }, [approvals, item, profile]);
+  const canCloseDeferral = isInitiator
+    ? item?.status === "COMPLETED"
+    : false;
+  const canSoftDeleteDeferral = isInitiator && item?.status === "IN_APPROVAL";
+  const canHardDeleteDraft = isInitiator && item?.status === "DRAFT";
 
   const hydrateLocalFromItem = useCallback((d: Deferral) => {
     setWorkOrderNo(d.workOrderNo ?? ""); // ✅ ADD
@@ -414,14 +496,10 @@ export default function DeferralDetailsPage() {
       setItem(d.item);
       hydrateLocalFromItem(d.item);
 
-      if (d.item.status === "DRAFT" || d.item.status === "RETURNED") {
-        const a = await api<{ approvals: ApprovalRow[] }>(
-          `/api/deferrals/${deferralId}/approvals`,
-        );
-        setApprovals(a.approvals ?? []);
-      } else {
-        setApprovals([]);
-      }
+      const a = await api<{ approvals: ApprovalRow[] }>(
+        `/api/deferrals/${deferralId}/approvals`,
+      );
+      setApprovals(a.approvals ?? []);
     } catch (e: any) {
       toast("Error", { description: e.message ?? "Failed to load" });
     } finally {
@@ -466,14 +544,13 @@ export default function DeferralDetailsPage() {
     return missing;
   }
 
-  // ---------- PATCH helper + autosave (debounced) ----------
+  // ---------- PATCH helper + save queue ----------
   const pendingPatchRef = useRef<any>({});
-  const debounceRef = useRef<any>(null);
 
   const patchNow = useCallback(
     async (payload: any, silent?: boolean) => {
-      if (!deferralId) return;
-      if (!canEditDraft) return; // ✅ ADD
+      if (!deferralId) return false;
+      if (!canEditDraft) return false; // ✅ ADD
 
       setSaving(true);
       try {
@@ -486,8 +563,10 @@ export default function DeferralDetailsPage() {
         );
         setItem(res.item);
         if (!silent) toast.success("Saved");
+        return true;
       } catch (e: any) {
         toast.error(e?.message ?? "Failed to save");
+        return false;
       } finally {
         setSaving(false);
       }
@@ -500,23 +579,45 @@ export default function DeferralDetailsPage() {
       if (!canEditDraft) return; // ✅ ADD
 
       pendingPatchRef.current = { ...pendingPatchRef.current, ...partial };
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(async () => {
-        const payload = pendingPatchRef.current;
-        pendingPatchRef.current = {};
-        if (Object.keys(payload).length === 0) return;
-        await patchNow(payload, true);
-      }, 600);
     },
-    [patchNow],
+    [canEditDraft],
+  );
+
+  const serializeMitigationRows = useCallback(
+    (rows: EditableMitigationRow[]) =>
+      rows
+        .map((row) => ({
+          mitigationText: row.mitigationText.trim(),
+          requiredDepartment: row.requiredDepartment.trim(),
+        }))
+        .filter((row) => row.mitigationText && row.requiredDepartment),
+    [],
+  );
+
+  const updateMitigationRows = useCallback(
+    (
+      updater:
+        | EditableMitigationRow[]
+        | ((prev: EditableMitigationRow[]) => EditableMitigationRow[]),
+    ) => {
+      setMitigationRows((prev) => {
+        const next =
+          typeof updater === "function"
+            ? updater(prev)
+            : updater;
+
+        queuePatch({ mitigations: serializeMitigationRows(next) });
+        return next;
+      });
+    },
+    [queuePatch, serializeMitigationRows],
   );
 
   const flushPatch = useCallback(async () => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
     const payload = pendingPatchRef.current;
-    pendingPatchRef.current = {};
     if (Object.keys(payload).length === 0) return;
-    await patchNow(payload, true);
+    const saved = await patchNow(payload, true);
+    if (saved) pendingPatchRef.current = {};
   }, [patchNow]);
 
   // ---------- Risks ----------
@@ -624,13 +725,14 @@ export default function DeferralDetailsPage() {
         },
       );
       setRiskRows(res.items ?? []);
+      pendingRiskRef.current = false;
       toast.success("Risks saved");
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to save risks");
     } finally {
       setRiskSaving(false);
     }
-  }, [deferralId, riskRows]);
+  }, [deferralId, riskRows, canEditDraft]);
 
   // ---------- Attachments ----------
   const loadAttachments = useCallback(async () => {
@@ -682,7 +784,7 @@ export default function DeferralDetailsPage() {
         toast.error("Upload failed");
       }
     },
-    [deferralId, loadAttachments],
+    [deferralId, loadAttachments, canEditDraft],
   );
 
   // load extra resources
@@ -709,6 +811,17 @@ export default function DeferralDetailsPage() {
       setActiveTab(next);
     },
     [editMode, flushPatch, flushRisksSave, canEditDraft],
+  );
+
+  const onViewTabChange = useCallback(
+    async (next: string) => {
+      if (editMode && canEditDraft) {
+        await flushRisksSave();
+        await flushPatch();
+      }
+      if (VIEW_TABS.has(next)) setViewTab(next as ViewTab);
+    },
+    [editMode, canEditDraft, flushPatch, flushRisksSave],
   );
 
   // ---------- Dates helpers ----------
@@ -783,6 +896,158 @@ export default function DeferralDetailsPage() {
     }
   }
 
+  async function approveCurrentApproval() {
+    if (!myActiveApproval) return;
+
+    setApprovalBusy("approve");
+    try {
+      await api(`/api/approvals/${myActiveApproval.id}/approve`, {
+        method: "POST",
+        json: { comment: approvalComment.trim() },
+      });
+
+      toast.success("Approved");
+      setApprovalComment("");
+      await load();
+      router.refresh();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Approve failed");
+    } finally {
+      setApprovalBusy(null);
+    }
+  }
+
+  async function returnCurrentApproval() {
+    if (!myActiveApproval) return;
+
+    const comment = approvalComment.trim();
+    if (comment.length < 3) {
+      toast.warning("Comment required", {
+        description: "Add a reason before returning this deferral.",
+      });
+      return;
+    }
+
+    setApprovalBusy("return");
+    try {
+      await api(`/api/approvals/${myActiveApproval.id}/return`, {
+        method: "POST",
+        json: { comment },
+      });
+
+      toast.success("Returned for revision", {
+        description: "The deferral was sent back to the initiator.",
+      });
+      setApprovalComment("");
+      await load();
+      router.refresh();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Return failed");
+    } finally {
+      setApprovalBusy(null);
+    }
+  }
+
+  async function rejectCurrentApproval() {
+    if (!myActiveApproval) return;
+
+    const comment = approvalComment.trim();
+    if (comment.length < 3) {
+      toast.warning("Comment required", {
+        description: "Add a reason before rejecting this deferral completely.",
+      });
+      return;
+    }
+
+    setApprovalBusy("reject");
+    try {
+      await api(`/api/approvals/${myActiveApproval.id}/reject`, {
+        method: "POST",
+        json: { comment },
+      });
+
+      toast.success("Deferral rejected", {
+        description: "The deferral was rejected completely and cannot be resubmitted.",
+      });
+      setApprovalComment("");
+      await load();
+      router.refresh();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Reject failed");
+    } finally {
+      setApprovalBusy(null);
+    }
+  }
+
+  async function closeDeferral() {
+    if (!item) return;
+
+    setRecordActionBusy("close");
+    try {
+      await api(`/api/deferrals/${item.id}/close`, {
+        method: "POST",
+      });
+
+      toast.success("Deferral closed");
+      setShowCloseDialog(false);
+      await load();
+      router.refresh();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to close deferral");
+    } finally {
+      setRecordActionBusy(null);
+    }
+  }
+
+  async function softDeleteDeferral() {
+    if (!item) return;
+
+    const reason = deleteReason.trim();
+    if (reason.length < 3) {
+      toast.warning("Reason required", {
+        description: "Add a short reason before deleting the in-approval deferral.",
+      });
+      return;
+    }
+
+    setRecordActionBusy("softDelete");
+    try {
+      await api(`/api/deferrals/${item.id}/soft-delete`, {
+        method: "POST",
+        json: { reason },
+      });
+
+      toast.success("Deferral marked as deleted");
+      setDeleteReason("");
+      setShowSoftDeleteDialog(false);
+      await load();
+      router.refresh();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to mark deferral as deleted");
+    } finally {
+      setRecordActionBusy(null);
+    }
+  }
+
+  async function hardDeleteDraft() {
+    if (!item) return;
+
+    setRecordActionBusy("hardDelete");
+    try {
+      await api(`/api/deferrals/${item.id}`, {
+        method: "DELETE",
+      });
+
+      toast.success("Draft deleted");
+      router.push("/deferrals");
+      router.refresh();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to delete draft");
+    } finally {
+      setRecordActionBusy(null);
+    }
+  }
+
   if (loading) {
     return (
       <Card>
@@ -826,6 +1091,12 @@ export default function DeferralDetailsPage() {
             </span>
           </div>
 
+          {item.deletedReason && (
+            <div className="mt-2 text-sm text-destructive">
+              Delete reason: {item.deletedReason}
+            </div>
+          )}
+
           <div className="mt-2 text-xs text-muted-foreground">
             Initiator:{" "}
             <span className="font-medium">{profile?.name ?? "—"}</span> •{" "}
@@ -833,12 +1104,15 @@ export default function DeferralDetailsPage() {
           </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {canEditDraft && (
             <Button
               variant={editMode ? "secondary" : "default"}
               onClick={async () => {
-                if (editMode) await flushPatch();
+                if (editMode) {
+                  await flushRisksSave();
+                  await flushPatch();
+                }
                 setEditMode((v) => !v);
                 const url = editMode
                   ? `/deferrals/${item.id}`
@@ -850,31 +1124,76 @@ export default function DeferralDetailsPage() {
             </Button>
           )}
 
+          {canCloseDeferral && (
+            <Button
+              onClick={() => setShowCloseDialog(true)}
+              disabled={recordActionBusy !== null}
+              className={` bg-red-500  hover:bg-red-400`}
+            >
+              Close deferral
+            </Button>
+          )}
+
+          {canSoftDeleteDeferral && (
+            <Button
+              onClick={() => setShowSoftDeleteDialog(true)}
+              disabled={recordActionBusy !== null}
+               className={` bg-red-500  hover:bg-red-400`}
+            >
+              Delete with reason
+            </Button>
+          )}
+
+          {canHardDeleteDraft && (
+            <Button
+              variant="destructive"
+              onClick={() => setShowHardDeleteDialog(true)}
+              disabled={recordActionBusy !== null}
+            >
+              Delete draft permanently
+            </Button>
+          )}
+
           {canEditDraft && (
             <SubmitDeferralDialog
               disabled={busy}
-              initialWorkOrderNo={item.workOrderNo}
-              initialWorkOrderTitle={item.workOrderTitle}
-              validateBeforeOpen={() => getMissingFields(item, riskRows)}
+              initialWorkOrderNo={editMode ? workOrderNo : item.workOrderNo}
+              initialWorkOrderTitle={
+                editMode ? workOrderTitle : item.workOrderTitle
+              }
+              validateBeforeOpen={() =>
+                getMissingFields(
+                  editMode
+                    ? {
+                        ...item,
+                        workOrderNo,
+                        workOrderTitle,
+                        equipmentTag,
+                        equipmentDescription,
+                        originalLafd: fromIsoDateInput(originalLafd),
+                        lafdStartDate: fromIsoDateInput(lafdCurrent),
+                        lafdEndDate: fromIsoDateInput(lafdDeferredTo),
+                        description,
+                        justification,
+                        consequence,
+                      }
+                    : item,
+                  riskRows,
+                )
+              }
               onValidationFailed={(missing) => {
                 toast.warning("Missing required details", {
                   description: missing.join(" • "),
                 });
               }}
               onSubmit={async ({ workOrderNo, workOrderTitle }) => {
-                const mitigationPayload = mitigationRows
-                  .map((m) => ({
-                    mitigationText: m.mitigationText.trim(),
-                    requiredDepartment: m.requiredDepartment.trim(),
-                  }))
-                  .filter((m) => m.mitigationText && m.requiredDepartment);
+                const mitigationPayload =
+                  serializeMitigationRows(mitigationRows);
 
-                if (mitigationPayload.length > 0) {
-                  await api(`/api/deferrals/${item.id}`, {
-                    method: "PATCH",
-                    json: { mitigations: mitigationPayload },
-                  });
-                }
+                await api(`/api/deferrals/${item.id}`, {
+                  method: "PATCH",
+                  json: { mitigations: mitigationPayload },
+                });
 
                 const checkRes = await fetch(
                   `/api/deferrals/check-work-order`,
@@ -928,11 +1247,87 @@ export default function DeferralDetailsPage() {
         </div>
       </div>
 
+      {myActiveApproval &&
+        profile?.role === "RELIABILITY_GM" &&
+        myActiveApproval.stepRole === "RELIABILITY_GM" && (
+          <GmDecisionPanel
+            deferralId={item.id}
+            initialTA={Boolean(item.requiresTechnicalAuthority)}
+            initialAdHoc={Boolean(item.requiresAdHoc)}
+            gmApprovalStatus={gmApprovalStatus}
+            gmApprovalIsActive={gmApprovalIsActive}
+            canEdit={true}
+            onSaved={async () => {
+              await load();
+              router.refresh();
+            }}
+          />
+        )}
+
+      {myActiveApproval && (
+        <Card className="border-amber-300/70">
+          <CardHeader>
+            <CardTitle className="text-base">Your Approval Action</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+              <span>
+                Role:{" "}
+                <span className="font-medium text-foreground">
+                  {formatStepRole(myActiveApproval.stepRole)}
+                </span>
+              </span>
+              {myActiveApproval.targetDepartment && (
+                <span>
+                  Department:{" "}
+                  <span className="font-medium text-foreground">
+                    {myActiveApproval.targetDepartment}
+                  </span>
+                </span>
+              )}
+            </div>
+
+            <Textarea
+              value={approvalComment}
+              onChange={(e) => setApprovalComment(e.target.value)}
+              placeholder="Add a comment. (Required when returning/rejecting the deferral)"
+              rows={3}
+            />
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                onClick={approveCurrentApproval}
+                disabled={approvalBusy !== null}
+              >
+                {approvalBusy === "approve" ? "Working..." : "Approve"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={returnCurrentApproval}
+                disabled={approvalBusy !== null}
+              >
+                {approvalBusy === "return" ? "Working..." : "Return to Initiator"}
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={rejectCurrentApproval}
+                disabled={approvalBusy !== null}
+              >
+                {approvalBusy === "reject" ? "Working..." : "Reject Completely"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/************* */}
 
       <Tabs
         value={viewTab}
-        onValueChange={(v) => setViewTab(v as any)}
+        onValueChange={(v) => void onViewTabChange(v)}
         className="w-full"
       >
         <TabsList className="flex flex-wrap">
@@ -1234,7 +1629,7 @@ export default function DeferralDetailsPage() {
             </Card>
           )}
 
-          {/* EDIT MODE (tabs + autosave) */}
+          {/* EDIT MODE (tabs + explicit saves) */}
           {editMode && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
@@ -1242,13 +1637,14 @@ export default function DeferralDetailsPage() {
                 <Button
                   variant="secondary"
                   onClick={async () => {
+                    await flushRisksSave();
                     await flushPatch();
                     toast.success("Saved");
                   }}
-                  disabled={!canEditDraft || saving}
+                  disabled={!canEditDraft || saving || riskSaving}
                 >
                   <Save className="mr-2 h-4 w-4" />
-                  {saving ? "Saving..." : "Save now"}
+                  {saving || riskSaving ? "Saving..." : "Save now"}
                 </Button>
               </CardHeader>
 
@@ -1697,14 +2093,8 @@ export default function DeferralDetailsPage() {
                         size="sm"
                         disabled={!canEditDraft || saving}
                         onClick={async () => {
-                          const payload = mitigationRows
-                            .map((m) => ({
-                              mitigationText: m.mitigationText.trim(),
-                              requiredDepartment: m.requiredDepartment.trim(),
-                            }))
-                            .filter(
-                              (m) => m.mitigationText && m.requiredDepartment,
-                            );
+                          const payload =
+                            serializeMitigationRows(mitigationRows);
                           await patchNow({ mitigations: payload });
                         }}
                       >
@@ -1716,7 +2106,7 @@ export default function DeferralDetailsPage() {
                         variant="outline"
                         disabled={!canEditDraft}
                         onClick={() =>
-                          setMitigationRows((prev) => [
+                          updateMitigationRows((prev) => [
                             ...prev,
                             { mitigationText: "", requiredDepartment: "" },
                           ])
@@ -1741,7 +2131,7 @@ export default function DeferralDetailsPage() {
                               variant="ghost"
                               size="sm"
                               onClick={() =>
-                                setMitigationRows((prev) =>
+                                updateMitigationRows((prev) =>
                                   prev.filter((_, i) => i !== index),
                                 )
                               }
@@ -1759,7 +2149,7 @@ export default function DeferralDetailsPage() {
                             value={row.requiredDepartment}
                             disabled={!canEditDraft}
                             onValueChange={(v) =>
-                              setMitigationRows((prev) =>
+                              updateMitigationRows((prev) =>
                                 prev.map((r, i) =>
                                   i === index
                                     ? { ...r, requiredDepartment: v }
@@ -1789,7 +2179,7 @@ export default function DeferralDetailsPage() {
                             value={row.mitigationText}
                             disabled={!canEditDraft}
                             onChange={(e) =>
-                              setMitigationRows((prev) =>
+                              updateMitigationRows((prev) =>
                                 prev.map((r, i) =>
                                   i === index
                                     ? { ...r, mitigationText: e.target.value }
@@ -1902,7 +2292,10 @@ export default function DeferralDetailsPage() {
             </Card>
           ) : (
             <>
-              <ApprovalTimeline deferralId={item.id} />
+              <ApprovalTimeline
+                deferralId={item.id}
+                initiatorDepartment={item.initiatorDepartment}
+              />
             </>
           )}
         </TabsContent>
@@ -1946,7 +2339,14 @@ export default function DeferralDetailsPage() {
                           )}
                         </div>
 
-                        <Badge variant="secondary">Cycle #{h.cycle}</Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary">
+                            {h.status === "REJECTED"
+                              ? "Rejected Completely"
+                              : "Returned for Revision"}
+                          </Badge>
+                          <Badge variant="secondary">Cycle #{h.cycle}</Badge>
+                        </div>
                       </div>
 
                       <div className="mt-2 text-xs text-muted-foreground">
@@ -1978,6 +2378,118 @@ export default function DeferralDetailsPage() {
           </Button>
         </TabsContent>
       </Tabs>
+
+      <AlertDialog
+        open={showCloseDialog}
+        onOpenChange={(open) => setShowCloseDialog(open)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Close deferral</AlertDialogTitle>
+            <AlertDialogDescription>
+              Use this when the work order was fulfilled and the deferral can be closed by the initiator.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowCloseDialog(false)}
+              disabled={recordActionBusy !== null}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void closeDeferral()}
+              disabled={recordActionBusy !== null}
+            >
+              {recordActionBusy === "close" ? "Closing..." : "Close deferral"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={showSoftDeleteDialog}
+        onOpenChange={(open) => {
+          setShowSoftDeleteDialog(open);
+          if (!open) setDeleteReason("");
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark deferral as deleted</AlertDialogTitle>
+            <AlertDialogDescription>
+              This keeps the record in the database and changes its status to deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Reason</div>
+            <Textarea
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+              placeholder="Enter the reason for deleting this in-approval deferral"
+              rows={4}
+            />
+          </div>
+
+          <AlertDialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowSoftDeleteDialog(false);
+                setDeleteReason("");
+              }}
+              disabled={recordActionBusy !== null}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void softDeleteDeferral()}
+              disabled={recordActionBusy !== null}
+            >
+              {recordActionBusy === "softDelete"
+                ? "Deleting..."
+                : "Mark as deleted"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={showHardDeleteDialog}
+        onOpenChange={(open) => setShowHardDeleteDialog(open)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete draft permanently</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the draft from the database completely. It cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowHardDeleteDialog(false)}
+              disabled={recordActionBusy !== null}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void hardDeleteDraft()}
+              disabled={recordActionBusy !== null}
+            >
+              {recordActionBusy === "hardDelete"
+                ? "Deleting..."
+                : "Delete permanently"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {duplicateInfo && (
         <AlertDialog

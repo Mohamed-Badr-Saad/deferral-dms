@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
+  DEPARTMENTS,
   STATUS_LABELS,
   STATUS_COLORS,
   DEFERRAL_STATUS,
@@ -33,7 +34,24 @@ type Deferral = {
   deferralNumber?: number | null;
 };
 
+type SearchProfile = {
+  role: string;
+  department: string;
+};
+
 type Scope = "active" | "history" | "all";
+
+type AppliedFilters = {
+  scope: Scope;
+  department: string;
+  status: string;
+  deferralCode: string;
+  workOrderNo: string;
+  equipmentTag: string;
+  updatedFromISO: string;
+  updatedToISO: string;
+  deferralRank: string;
+};
 
 type CountsResponse = {
   byStatus: Record<string, number>;
@@ -51,32 +69,30 @@ type ItemsResponse = {
   nextOffset: number | null;
 };
 
-const DEPARTMENTS = [
-  "Electrical",
-  "Mechanical",
-  "Instrument",
-  "Turbo",
-  "Civil",
-  "HVAC",
-  "Telecom",
-  "Condition monitoring",
-  "Inspection",
-  "Painting",
-  "Subsea control",
-  "Production",
+const ACTIVE_STATUSES = [
+  "DRAFT",
+  "IN_APPROVAL",
+  "APPROVED",
+  "RETURNED",
 ] as const;
+
+const HISTORY_STATUSES = [
+  "COMPLETED",
+  "REJECTED",
+  "CLOSED",
+  "DELETED",
+  "EXPIRED",
+] as const;
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
 
 export default function DeferralsPage() {
   const searchParams = useSearchParams();
 
   const qsScope = (searchParams.get("scope") ?? "active").toLowerCase();
-  const ACTIVE_STATUSES = [
-    "DRAFT",
-    "SUBMITTED",
-    "IN_APPROVAL",
-    "RETURNED",
-  ] as const;
-  const HISTORY_STATUSES = ["COMPLETED", "APPROVED", "REJECTED"] as const;
 
   const initialScope: Scope =
     qsScope === "history" ? "history" : qsScope === "all" ? "all" : "active";
@@ -85,22 +101,17 @@ export default function DeferralsPage() {
 
   // fetched dataset (single list based on filter scope)
   const [items, setItems] = useState<Deferral[]>([]);
-  type ItemsResponse = {
-    items: Deferral[];
-    nextOffset: number | null;
-  };
-
-  const [globalCounts, setGlobalCounts] = useState<CountsResponse | null>(null);
   const [matchedTotal, setMatchedTotal] = useState<number>(0);
+  const [profile, setProfile] = useState<SearchProfile | null>(null);
 
-  const [loadingCounts, setLoadingCounts] = useState(true);
   const [loadingItems, setLoadingItems] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const isInitiatorLevel = profile?.role === "ENGINEER_APPLICANT";
 
   // "Draft filters" are what user is editing in the UI
   const [draftScope, setDraftScope] = useState<"active" | "history" | "all">(
-    "all",
+    initialScope,
   );
 
   const [draftDepartment, setDraftDepartment] = useState<string>("ALL");
@@ -113,17 +124,9 @@ export default function DeferralsPage() {
   const [draftDeferralRank, setDraftDeferralRank] = useState<string>("ALL");
 
   // "Applied filters" are what the backend uses
-  const [appliedFilters, setAppliedFilters] = useState<null | {
-    scope: Scope;
-    department: string;
-    status: string;
-    deferralCode: string;
-    workOrderNo: string;
-    equipmentTag: string;
-    updatedFromISO: string;
-    updatedToISO: string;
-    deferralRank: string;
-  }>(null);
+  const [appliedFilters, setAppliedFilters] = useState<AppliedFilters | null>(
+    null,
+  );
 
   const exportCsv = useCallback(() => {
     if (!appliedFilters) return;
@@ -207,54 +210,54 @@ export default function DeferralsPage() {
     [appliedFilters],
   );
 
-  // Load counts quickly on mount (no filter needed, but we can show global counts)
   useEffect(() => {
     let mounted = true;
+
     (async () => {
-      setLoadingCounts(true);
       try {
-        const c = await api<CountsResponse>(
-          `/api/deferrals?mode=counts&scope=all`,
-        );
-        if (mounted) setGlobalCounts(c ?? null);
-      } catch (e: any) {
-        if (mounted) setErr(e.message ?? "Failed to load counts");
-      } finally {
-        if (mounted) setLoadingCounts(false);
+        const res = await api<{ profile: SearchProfile }>("/api/profile");
+        if (mounted) setProfile(res.profile ?? null);
+      } catch {
+        if (mounted) setProfile(null);
       }
     })();
+
     return () => {
       mounted = false;
     };
   }, []);
 
   const resetFilters = useCallback(() => {
-    setDraftScope("all");
-    setDraftDepartment("ALL");
+    setDraftScope(initialScope);
+    setDraftDepartment(
+      isInitiatorLevel && profile?.department ? profile.department : "ALL",
+    );
     setDraftStatus("ALL");
     setDraftEquipmentTag("");
     setDraftUpdatedFrom("");
     setDraftUpdatedTo("");
     setAppliedFilters(null);
     setItems([]);
+    setNextOffset(null);
+    setMatchedTotal(0);
     setErr(null);
     setDraftDeferralCode("");
     setDraftWorkOrderNo("");
     setDraftDeferralRank("ALL");
-  }, []);
+  }, [initialScope, isInitiatorLevel, profile?.department]);
+
+  useEffect(() => {
+    setDraftScope(initialScope);
+  }, [initialScope]);
+
+  useEffect(() => {
+    if (isInitiatorLevel && profile?.department) {
+      setDraftDepartment(profile.department);
+    }
+  }, [isInitiatorLevel, profile?.department]);
 
   const fetchMatchedTotal = useCallback(
-    async (filters: {
-      scope: Scope;
-      department: string;
-      status: string;
-      deferralCode: string;
-      workOrderNo: string;
-      equipmentTag: string;
-      updatedFromISO: string;
-      updatedToISO: string;
-      deferralRank: string;
-    }) => {
+    async (filters: AppliedFilters) => {
       const p = new URLSearchParams();
       p.set("mode", "counts");
       p.set("scope", filters.scope);
@@ -289,9 +292,13 @@ export default function DeferralsPage() {
     }
     setErr(null);
 
-    const dept = draftDepartment === "ALL" ? "" : draftDepartment;
+    const dept =
+      isInitiatorLevel && profile?.department
+        ? profile.department.trim()
+        : draftDepartment === "ALL"
+          ? ""
+          : draftDepartment;
     const st = draftStatus === "ALL" ? "ALL" : draftStatus;
-    const equipmentTag = draftEquipmentTag.trim();
 
     const { fromISO, toISO } = makeUpdatedISO(draftUpdatedFrom, draftUpdatedTo);
 
@@ -343,28 +350,6 @@ export default function DeferralsPage() {
       setItems(res.items ?? []);
       setNextOffset(res.nextOffset ?? null);
 
-      // refresh counts for the SAME filters (so cards represent filtered set)
-      const qsCounts = (() => {
-        const p = new URLSearchParams();
-        p.set("mode", "counts");
-        p.set("scope", newApplied.scope);
-        if (newApplied.department) p.set("department", newApplied.department);
-        if (newApplied.equipmentTag)
-          p.set("equipmentTag", newApplied.equipmentTag);
-        if (newApplied.status !== "ALL") p.set("status", newApplied.status);
-        if (newApplied.updatedFromISO)
-          p.set("updatedFrom", newApplied.updatedFromISO);
-        if (newApplied.updatedToISO)
-          p.set("updatedTo", newApplied.updatedToISO);
-        if (newApplied.deferralCode)
-          p.set("deferralCode", newApplied.deferralCode);
-        if (newApplied.workOrderNo)
-          p.set("workOrderNo", newApplied.workOrderNo);
-        if (newApplied.deferralRank !== "ALL")
-          p.set("deferralRank", newApplied.deferralRank);
-        return p.toString();
-      })();
-
       await fetchMatchedTotal(newApplied);
 
       const url =
@@ -374,8 +359,8 @@ export default function DeferralsPage() {
             ? "/deferrals?scope=all"
             : "/deferrals";
       window.history.replaceState(null, "", url);
-    } catch (e: any) {
-      setErr(e.message ?? "Failed to load deferrals");
+    } catch (error: unknown) {
+      setErr(getErrorMessage(error, "Failed to load deferrals"));
     } finally {
       setLoadingItems(false);
     }
@@ -388,8 +373,11 @@ export default function DeferralsPage() {
     draftUpdatedTo,
     draftDeferralCode,
     draftWorkOrderNo,
+    draftDeferralRank,
+    isInitiatorLevel,
     makeUpdatedISO,
     fetchMatchedTotal,
+    profile?.department,
   ]);
 
   const loadMore = useCallback(async () => {
@@ -411,26 +399,12 @@ export default function DeferralsPage() {
       });
 
       setNextOffset(res.nextOffset ?? null);
-    } catch (e: any) {
-      setErr(e.message ?? "Failed to load more");
+    } catch (error: unknown) {
+      setErr(getErrorMessage(error, "Failed to load more"));
     } finally {
       setLoadingMore(false);
     }
   }, [appliedFilters, nextOffset, loadingMore, loadingItems, buildQS]);
-
-  const fetchGlobalCounts = useCallback(async () => {
-    setLoadingCounts(true);
-    try {
-      const c = await api<CountsResponse>(
-        `/api/deferrals?mode=counts&scope=all`,
-      );
-      setGlobalCounts(c ?? null);
-    } catch (e: any) {
-      setErr(e.message ?? "Failed to load counts");
-    } finally {
-      setLoadingCounts(false);
-    }
-  }, []);
 
   const refreshResults = useCallback(async () => {
     if (!appliedFilters) return;
@@ -461,6 +435,8 @@ export default function DeferralsPage() {
         p.set("updatedFrom", appliedFilters.updatedFromISO);
       if (appliedFilters.updatedToISO)
         p.set("updatedTo", appliedFilters.updatedToISO);
+      if (appliedFilters.deferralRank !== "ALL")
+        p.set("deferralRank", appliedFilters.deferralRank);
 
       const res = await api<ItemsResponse>(`/api/deferrals?${p.toString()}`);
 
@@ -469,8 +445,8 @@ export default function DeferralsPage() {
 
       // refresh matched total (still filtered)
       await fetchMatchedTotal(appliedFilters);
-    } catch (e: any) {
-      setErr(e.message ?? "Failed to refresh results");
+    } catch (error: unknown) {
+      setErr(getErrorMessage(error, "Failed to refresh results"));
     } finally {
       setLoadingItems(false);
     }
@@ -499,21 +475,7 @@ export default function DeferralsPage() {
     return () => obs.disconnect();
   }, [loadMore]);
 
-  const stats = useMemo(() => {
-    const by = globalCounts?.byStatus ?? {};
-    const get = (k: string) => by[k] ?? 0;
-    return {
-      DRAFT: get("DRAFT"),
-      SUBMITTED: get("SUBMITTED"),
-      RETURNED: get("RETURNED"),
-      IN_APPROVAL: get("IN_APPROVAL"),
-      REJECTED: get("REJECTED"),
-      APPROVED: get("APPROVED"),
-      COMPLETED: get("COMPLETED"),
-    };
-  }, [globalCounts]);
-
-  const statusOptions = useMemo(() => {
+  const statusOptions = useMemo((): readonly (typeof DEFERRAL_STATUS)[number][] => {
     if (draftScope === "active") return ACTIVE_STATUSES;
     if (draftScope === "history") return HISTORY_STATUSES;
     return DEFERRAL_STATUS; // "all"
@@ -523,14 +485,14 @@ export default function DeferralsPage() {
     // If user had a status that doesn't belong to the new scope, reset it.
     if (draftStatus === "ALL") return;
 
-    const allowed =
+    const allowed: readonly string[] =
       draftScope === "active"
         ? ACTIVE_STATUSES
         : draftScope === "history"
           ? HISTORY_STATUSES
           : DEFERRAL_STATUS;
 
-    if (!allowed.includes(draftStatus as any)) {
+    if (!allowed.includes(draftStatus)) {
       setDraftStatus("ALL");
     }
   }, [draftScope, draftStatus]);
@@ -544,10 +506,6 @@ export default function DeferralsPage() {
       setDraftUpdatedTo("");
     }
   }, [draftUpdatedFrom, draftUpdatedTo]);
-
-  useEffect(() => {
-    fetchGlobalCounts();
-  }, [fetchGlobalCounts]);
 
   const totalMatched = matchedTotal ?? 0;
   const loaded = items.length;
@@ -655,7 +613,15 @@ export default function DeferralsPage() {
               <div className="text-xs text-muted-foreground">Scope</div>
               <Select
                 value={draftScope}
-                onValueChange={(v) => setDraftScope(v as any)}
+                onValueChange={(value) => {
+                  if (
+                    value === "active" ||
+                    value === "history" ||
+                    value === "all"
+                  ) {
+                    setDraftScope(value);
+                  }
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Scope" />
@@ -672,15 +638,26 @@ export default function DeferralsPage() {
             <div className="space-y-1">
               <div className="text-xs text-muted-foreground">Department</div>
               <Select
-                value={draftDepartment}
+                value={
+                  isInitiatorLevel && profile?.department
+                    ? profile.department
+                    : draftDepartment
+                }
                 onValueChange={setDraftDepartment}
               >
-                <SelectTrigger>
+                <SelectTrigger
+                  disabled={Boolean(isInitiatorLevel && profile?.department)}
+                >
                   <SelectValue placeholder="Department" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ALL">All departments</SelectItem>
-                  {DEPARTMENTS.map((d) => (
+                  {!isInitiatorLevel && (
+                    <SelectItem value="ALL">All departments</SelectItem>
+                  )}
+                  {(isInitiatorLevel && profile?.department
+                    ? [profile.department]
+                    : DEPARTMENTS
+                  ).map((d) => (
                     <SelectItem key={d} value={d}>
                       {d}
                     </SelectItem>

@@ -10,10 +10,16 @@ const ACTIVE_STATUSES = [
   "DRAFT",
   "SUBMITTED",
   "IN_APPROVAL",
+  "APPROVED",
   "RETURNED",
-  
 ] as const;
-const HISTORY_STATUSES = ["COMPLETED", "APPROVED", "REJECTED"] as const;
+const HISTORY_STATUSES = [
+  "COMPLETED",
+  "REJECTED",
+  "CLOSED",
+  "DELETED",
+  "EXPIRED",
+] as const;
 const ALL_STATUSES = [...ACTIVE_STATUSES, ...HISTORY_STATUSES] as const;
 
 const QuerySchema = z.object({

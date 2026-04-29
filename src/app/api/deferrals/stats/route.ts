@@ -5,8 +5,14 @@ import { deferrals } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
 
 const DRAFT = ["DRAFT"] as const;
-const IN_APPROVAL = ["SUBMITTED", "IN_APPROVAL"] as const;
-const COMPLETED = ["COMPLETED", "APPROVED", "REJECTED"] as const;
+const IN_APPROVAL = ["SUBMITTED", "IN_APPROVAL", "APPROVED"] as const;
+const COMPLETED = [
+  "COMPLETED",
+  "REJECTED",
+  "CLOSED",
+  "DELETED",
+  "EXPIRED",
+] as const;
 
 export async function GET() {
   const profile = await getBusinessProfile();

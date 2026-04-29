@@ -9,6 +9,11 @@ import {
 import { and, asc, eq, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
+const PLANNING_STEP_ROLES = new Set([
+  "PLANNING_ENGINEER",
+  "PLANNING_SUPERVISOR_ENGINEER",
+]);
+
 async function getCurrentCycle(deferralId: string): Promise<number> {
   const d = await db
     .select({ cycle: deferrals.approvalCycle })
@@ -31,6 +36,22 @@ async function deactivateOldCycleActives(deferralId: string, cycle: number) {
       AND is_active = true
       AND cycle <> ${cycle};
   `);
+}
+
+function isPlanningStage(stepRole: string | null | undefined) {
+  return PLANNING_STEP_ROLES.has(String(stepRole ?? ""));
+}
+
+async function setApprovedIfPlanningStepBecameActive(
+  deferralId: string,
+  stepRole: string | null | undefined,
+) {
+  if (!isPlanningStage(stepRole)) return;
+
+  await db
+    .update(deferrals)
+    .set({ status: "APPROVED", updatedAt: new Date() } as any)
+    .where(eq(deferrals.id, deferralId));
 }
 
 /**
@@ -135,6 +156,7 @@ export async function activateFirstPendingStep(deferralId: string) {
       ),
     );
 
+  await setApprovedIfPlanningStepBecameActive(deferralId, first.stepRole);
   await notifyAssigneesForStep(deferralId, first.stepOrder);
 }
 
@@ -274,6 +296,7 @@ export async function afterApprovalAdvance(deferralId: string) {
   }
 
   const nextOrder = nextPending[0].stepOrder;
+  const nextStepRole = nextPending[0].stepRole;
 
   await db
     .update(deferralApprovals)
@@ -286,6 +309,7 @@ export async function afterApprovalAdvance(deferralId: string) {
       ),
     );
 
+  await setApprovedIfPlanningStepBecameActive(deferralId, nextStepRole);
   await notifyAssigneesForStep(deferralId, nextOrder);
 }
 
