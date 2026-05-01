@@ -8,11 +8,12 @@ import {
   workOrderDeferrals,
   deferralApprovals,
   deferralMitigations,
+  notifications,
   responsibleGmMappings,
   users,
 } from "@/src/db/schema";
 import { getBusinessProfile, requireRole } from "@/src/lib/authz";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray } from "drizzle-orm";
 import { buildApprovalSteps } from "@/src/lib/workflow";
 import { activateFirstStep } from "@/src/lib/approval-progress";
 import { computeRamCell, computeRamConsequence } from "@/src/lib/constants";
@@ -117,6 +118,7 @@ export async function POST(req: Request, ctx: Ctx) {
         .from(workOrderDeferrals)
         .where(eq(workOrderDeferrals.deferralId, deferralId))
         .limit(1);
+      let priorMappingsForWorkOrder: Array<{ deferralId: string | null }> = [];
 
       let deferralNumber: 1 | 2 | 3;
 
@@ -128,6 +130,9 @@ export async function POST(req: Request, ctx: Ctx) {
           .from(workOrderDeferrals)
           .where(eq(workOrderDeferrals.workOrderId, workOrderId))
           .orderBy(desc(workOrderDeferrals.deferralNumber));
+        priorMappingsForWorkOrder = existingMappings.map((row) => ({
+          deferralId: row.deferralId,
+        }));
 
         const next = (Number(existingMappings[0]?.deferralNumber ?? 0) + 1) as
           | 1
@@ -289,6 +294,26 @@ export async function POST(req: Request, ctx: Ctx) {
           targetDepartment: mitigationDepts[i],
           targetGmGroup: null,
         } as any);
+      }
+
+      // If the initiator fulfilled an expiry reminder by creating the next
+      // deferral for the same work order, clear the old expiry notifications.
+      if (!existingMapping[0] && deferralNumber >= 2) {
+        const priorDeferralIds = priorMappingsForWorkOrder
+          .map((row) => String(row.deferralId ?? ""))
+          .filter(Boolean);
+
+        if (priorDeferralIds.length > 0) {
+          await tx
+            .update(notifications)
+            .set({ isRead: true, readAt: new Date() } as any)
+            .where(
+              and(
+                inArray(notifications.deferralId, priorDeferralIds as any),
+                ilike(notifications.title, "Deferral expiring soon:%"),
+              ) as any,
+            );
+        }
       }
     });
 

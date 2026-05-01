@@ -93,9 +93,21 @@ export default function DeferralsPage() {
   const searchParams = useSearchParams();
 
   const qsScope = (searchParams.get("scope") ?? "active").toLowerCase();
+  const qsDepartment = (searchParams.get("department") ?? "").trim();
+  const qsStatus = (searchParams.get("status") ?? "").toUpperCase();
+  const qsDeferralRank = (searchParams.get("deferralRank") ?? "").trim();
 
   const initialScope: Scope =
     qsScope === "history" ? "history" : qsScope === "all" ? "all" : "active";
+  const initialStatus =
+    qsStatus && DEFERRAL_STATUS.includes(qsStatus as any) ? qsStatus : "ALL";
+  const initialDeferralRank =
+    qsDeferralRank === "1" || qsDeferralRank === "2" || qsDeferralRank === "3"
+      ? qsDeferralRank
+      : "ALL";
+  const hasUrlFilters = Boolean(
+    qsDepartment || initialStatus !== "ALL" || initialDeferralRank !== "ALL",
+  );
 
   const resultsScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -103,6 +115,7 @@ export default function DeferralsPage() {
   const [items, setItems] = useState<Deferral[]>([]);
   const [matchedTotal, setMatchedTotal] = useState<number>(0);
   const [profile, setProfile] = useState<SearchProfile | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
   const [loadingItems, setLoadingItems] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -114,19 +127,23 @@ export default function DeferralsPage() {
     initialScope,
   );
 
-  const [draftDepartment, setDraftDepartment] = useState<string>("ALL");
-  const [draftStatus, setDraftStatus] = useState<string>("ALL");
+  const [draftDepartment, setDraftDepartment] = useState<string>(
+    qsDepartment || "ALL",
+  );
+  const [draftStatus, setDraftStatus] = useState<string>(initialStatus);
   const [draftEquipmentTag, setDraftEquipmentTag] = useState("");
   const [draftUpdatedFrom, setDraftUpdatedFrom] = useState(""); // yyyy-mm-dd
   const [draftUpdatedTo, setDraftUpdatedTo] = useState(""); // yyyy-mm-dd
   const [draftDeferralCode, setDraftDeferralCode] = useState("");
   const [draftWorkOrderNo, setDraftWorkOrderNo] = useState("");
-  const [draftDeferralRank, setDraftDeferralRank] = useState<string>("ALL");
+  const [draftDeferralRank, setDraftDeferralRank] =
+    useState<string>(initialDeferralRank);
 
   // "Applied filters" are what the backend uses
   const [appliedFilters, setAppliedFilters] = useState<AppliedFilters | null>(
     null,
   );
+  const urlSyncDoneRef = useRef(false);
 
   const exportCsv = useCallback(() => {
     if (!appliedFilters) return;
@@ -219,6 +236,8 @@ export default function DeferralsPage() {
         if (mounted) setProfile(res.profile ?? null);
       } catch {
         if (mounted) setProfile(null);
+      } finally {
+        if (mounted) setProfileLoaded(true);
       }
     })();
 
@@ -253,8 +272,19 @@ export default function DeferralsPage() {
   useEffect(() => {
     if (isInitiatorLevel && profile?.department) {
       setDraftDepartment(profile.department);
+      return;
     }
-  }, [isInitiatorLevel, profile?.department]);
+
+    setDraftDepartment(qsDepartment || "ALL");
+  }, [isInitiatorLevel, profile?.department, qsDepartment]);
+
+  useEffect(() => {
+    setDraftStatus(initialStatus);
+  }, [initialStatus]);
+
+  useEffect(() => {
+    setDraftDeferralRank(initialDeferralRank);
+  }, [initialDeferralRank]);
 
   const fetchMatchedTotal = useCallback(
     async (filters: AppliedFilters) => {
@@ -279,6 +309,72 @@ export default function DeferralsPage() {
       setMatchedTotal(c?.totalMatched ?? 0);
     },
     [],
+  );
+
+  const buildFilterUrl = useCallback((filters: AppliedFilters) => {
+    const params = new URLSearchParams();
+    params.set("scope", filters.scope);
+
+    if (filters.department) params.set("department", filters.department);
+    if (filters.status && filters.status !== "ALL")
+      params.set("status", filters.status);
+    if (filters.deferralCode) params.set("deferralCode", filters.deferralCode);
+    if (filters.workOrderNo) params.set("workOrderNo", filters.workOrderNo);
+    if (filters.equipmentTag) params.set("equipmentTag", filters.equipmentTag);
+    if (filters.updatedFromISO)
+      params.set("updatedFrom", filters.updatedFromISO);
+    if (filters.updatedToISO) params.set("updatedTo", filters.updatedToISO);
+    if (filters.deferralRank !== "ALL")
+      params.set("deferralRank", filters.deferralRank);
+
+    return `/deferrals?${params.toString()}`;
+  }, []);
+
+  const loadWithFilters = useCallback(
+    async (newApplied: AppliedFilters, syncUrl = true) => {
+      setAppliedFilters(newApplied);
+      setItems([]);
+      setNextOffset(0);
+      setErr(null);
+      setLoadingItems(true);
+
+      try {
+        const p = new URLSearchParams();
+        p.set("offset", "0");
+        p.set("mode", "items");
+        p.set("scope", newApplied.scope);
+        p.set("pageSize", String(pageSize));
+        if (newApplied.department) p.set("department", newApplied.department);
+        if (newApplied.equipmentTag)
+          p.set("equipmentTag", newApplied.equipmentTag);
+        if (newApplied.status !== "ALL") p.set("status", newApplied.status);
+        if (newApplied.updatedFromISO)
+          p.set("updatedFrom", newApplied.updatedFromISO);
+        if (newApplied.updatedToISO)
+          p.set("updatedTo", newApplied.updatedToISO);
+        if (newApplied.deferralCode)
+          p.set("deferralCode", newApplied.deferralCode);
+        if (newApplied.workOrderNo)
+          p.set("workOrderNo", newApplied.workOrderNo);
+        if (newApplied.deferralRank !== "ALL")
+          p.set("deferralRank", newApplied.deferralRank);
+
+        const res = await api<ItemsResponse>(`/api/deferrals?${p.toString()}`);
+        setItems(res.items ?? []);
+        setNextOffset(res.nextOffset ?? null);
+
+        await fetchMatchedTotal(newApplied);
+
+        if (syncUrl) {
+          window.history.replaceState(null, "", buildFilterUrl(newApplied));
+        }
+      } catch (error: unknown) {
+        setErr(getErrorMessage(error, "Failed to load deferrals"));
+      } finally {
+        setLoadingItems(false);
+      }
+    },
+    [buildFilterUrl, fetchMatchedTotal, pageSize],
   );
 
   const applyFilters = useCallback(async () => {
@@ -314,56 +410,7 @@ export default function DeferralsPage() {
       deferralRank: draftDeferralRank,
     };
 
-    setAppliedFilters(newApplied);
-
-    // Reset list + cursor then fetch first page
-    setItems([]);
-    setNextOffset(0);
-
-    setLoadingItems(true);
-    try {
-      const qs = (() => {
-        // Temporarily build qs without relying on appliedFilters state (since setState is async)
-        const p = new URLSearchParams();
-        p.set("offset", "0");
-        p.set("mode", "items");
-        p.set("scope", newApplied.scope);
-        p.set("pageSize", String(pageSize));
-        if (newApplied.department) p.set("department", newApplied.department);
-        if (newApplied.equipmentTag)
-          p.set("equipmentTag", newApplied.equipmentTag);
-        if (newApplied.status !== "ALL") p.set("status", newApplied.status);
-        if (newApplied.updatedFromISO)
-          p.set("updatedFrom", newApplied.updatedFromISO);
-        if (newApplied.updatedToISO)
-          p.set("updatedTo", newApplied.updatedToISO);
-        if (newApplied.deferralCode)
-          p.set("deferralCode", newApplied.deferralCode);
-        if (newApplied.workOrderNo)
-          p.set("workOrderNo", newApplied.workOrderNo);
-        if (newApplied.deferralRank !== "ALL")
-          p.set("deferralRank", newApplied.deferralRank);
-        return p.toString();
-      })();
-
-      const res = await api<ItemsResponse>(`/api/deferrals?${qs}`);
-      setItems(res.items ?? []);
-      setNextOffset(res.nextOffset ?? null);
-
-      await fetchMatchedTotal(newApplied);
-
-      const url =
-        newApplied.scope === "history"
-          ? "/deferrals?scope=history"
-          : newApplied.scope === "all"
-            ? "/deferrals?scope=all"
-            : "/deferrals";
-      window.history.replaceState(null, "", url);
-    } catch (error: unknown) {
-      setErr(getErrorMessage(error, "Failed to load deferrals"));
-    } finally {
-      setLoadingItems(false);
-    }
+    await loadWithFilters(newApplied);
   }, [
     draftScope,
     draftDepartment,
@@ -376,8 +423,47 @@ export default function DeferralsPage() {
     draftDeferralRank,
     isInitiatorLevel,
     makeUpdatedISO,
-    fetchMatchedTotal,
+    loadWithFilters,
     profile?.department,
+  ]);
+
+  useEffect(() => {
+    if (urlSyncDoneRef.current || !profileLoaded) return;
+
+    const shouldAutoLoad = initialScope !== "active" || hasUrlFilters;
+    if (!shouldAutoLoad) return;
+
+    urlSyncDoneRef.current = true;
+
+    const department =
+      isInitiatorLevel && profile?.department
+        ? profile.department.trim()
+        : qsDepartment;
+
+    void loadWithFilters(
+      {
+        scope: initialScope,
+        department,
+        status: initialStatus,
+        deferralCode: "",
+        workOrderNo: "",
+        equipmentTag: "",
+        updatedFromISO: "",
+        updatedToISO: "",
+        deferralRank: initialDeferralRank,
+      },
+      false,
+    );
+  }, [
+    hasUrlFilters,
+    initialDeferralRank,
+    initialScope,
+    initialStatus,
+    isInitiatorLevel,
+    loadWithFilters,
+    profile?.department,
+    profileLoaded,
+    qsDepartment,
   ]);
 
   const loadMore = useCallback(async () => {

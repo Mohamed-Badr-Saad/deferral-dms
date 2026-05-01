@@ -120,7 +120,7 @@ function buildWhereClause(args: {
   else clauses.push(inArray(deferrals.status, scopeStatuses(scope) as any));
 
   const dept = effectiveDepartmentFilter(profile, department);
-  if (dept) clauses.push(eq(deferrals.initiatorDepartment, dept));
+  if (dept) clauses.push(ilike(deferrals.initiatorDepartment, dept));
 
   const code = (deferralCode ?? "").trim();
   if (code) clauses.push(ilike(deferrals.deferralCode, `%${code}%`));

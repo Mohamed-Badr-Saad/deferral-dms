@@ -90,6 +90,23 @@ type Attachment = {
   uploadedAt: string;
 };
 
+type DraftTab =
+  | "basic"
+  | "dates"
+  | "text"
+  | "risk"
+  | "mitigation"
+  | "attachments";
+
+const DRAFT_TABS = new Set<string>([
+  "basic",
+  "dates",
+  "text",
+  "risk",
+  "mitigation",
+  "attachments",
+]);
+
 function useDebouncedCallback<T extends (...args: any[]) => void>(
   fn: T,
   waitMs: number,
@@ -234,7 +251,8 @@ export default function NewDeferralPage() {
       }
 
       // no duplicates found
-      handleSubmit(false);
+      setDuplicateInfo(null);
+      setConfirmDuplicate(false);
     } catch (e: any) {
       console.error(e);
     }
@@ -243,9 +261,8 @@ export default function NewDeferralPage() {
   useEffect(() => {
     riskRowsRef.current = riskRows;
   }, [riskRows]);
-  // --- Risk autosave (debounced) ---
+  // --- Risk save queue ---
   const pendingRiskRef = useRef(false);
-  const riskDebounceRef = useRef<any>(null);
 
   const saveRisksNow = useCallback(
     async (silent?: boolean) => {
@@ -268,6 +285,7 @@ export default function NewDeferralPage() {
         );
 
         setRiskRows((res.items ?? []) as any);
+        pendingRiskRef.current = false;
         if (!silent) toast.success("Risks saved");
       } catch (e: any) {
         if (!silent) toast.error(e?.message ?? "Failed to save risks");
@@ -280,19 +298,10 @@ export default function NewDeferralPage() {
 
   const queueRisksSave = useCallback(() => {
     pendingRiskRef.current = true;
-    if (riskDebounceRef.current) clearTimeout(riskDebounceRef.current);
-
-    riskDebounceRef.current = setTimeout(async () => {
-      if (!pendingRiskRef.current) return;
-      pendingRiskRef.current = false;
-      await saveRisksNow(true); // silent autosave
-    }, 800);
   }, [saveRisksNow]);
 
   const flushRisksSave = useCallback(async () => {
-    if (riskDebounceRef.current) clearTimeout(riskDebounceRef.current);
     if (!pendingRiskRef.current) return;
-    pendingRiskRef.current = false;
     await saveRisksNow(true);
   }, [saveRisksNow]);
 
@@ -316,6 +325,7 @@ export default function NewDeferralPage() {
   const [justification, setJustification] = useState("");
   const [consequence, setConsequence] = useState("");
   const [busy, setBusy] = useState(false);
+  const [activeTab, setActiveTab] = useState<DraftTab>("basic");
   const [mitigationRows, setMitigationRows] = useState<MitigationRow[]>([
     { mitigationText: "", requiredDepartment: "" },
   ]);
@@ -540,11 +550,10 @@ export default function NewDeferralPage() {
   }, [draftId]);
 
   const pendingPatchRef = useRef<any>({});
-  const debounceRef = useRef<any>(null);
 
   const patchNow = useCallback(
     async (payload: any) => {
-      if (!deferral) return;
+      if (!deferral) return false;
       setSaving(true);
       try {
         const res = await api<{ item: Deferral }>(
@@ -555,8 +564,10 @@ export default function NewDeferralPage() {
           },
         );
         setDeferral(res.item);
+        return true;
       } catch (e: any) {
         toast.error(e?.message ?? "Failed to save");
+        return false;
       } finally {
         setSaving(false);
       }
@@ -567,23 +578,39 @@ export default function NewDeferralPage() {
   const queuePatch = useCallback(
     (partial: any) => {
       pendingPatchRef.current = { ...pendingPatchRef.current, ...partial };
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(async () => {
-        const payload = pendingPatchRef.current;
-        pendingPatchRef.current = {};
-        if (Object.keys(payload).length === 0) return;
-        await patchNow(payload);
-      }, 600);
     },
     [patchNow],
   );
 
+  const serializeMitigationRows = useCallback(
+    (rows: MitigationRow[]) =>
+      rows
+        .map((row) => ({
+          mitigationText: row.mitigationText.trim(),
+          requiredDepartment: row.requiredDepartment.trim(),
+        }))
+        .filter((row) => row.mitigationText && row.requiredDepartment),
+    [],
+  );
+
+  const updateMitigationRows = useCallback(
+    (
+      updater: MitigationRow[] | ((prev: MitigationRow[]) => MitigationRow[]),
+    ) => {
+      setMitigationRows((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        queuePatch({ mitigations: serializeMitigationRows(next) });
+        return next;
+      });
+    },
+    [queuePatch, serializeMitigationRows],
+  );
+
   const flushPatch = useCallback(async () => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
     const payload = pendingPatchRef.current;
-    pendingPatchRef.current = {};
     if (Object.keys(payload).length === 0) return;
-    await patchNow(payload);
+    const saved = await patchNow(payload);
+    if (saved) pendingPatchRef.current = {};
   }, [patchNow]);
 
   function validateEquipmentCode(v: string) {
@@ -611,7 +638,7 @@ export default function NewDeferralPage() {
       });
     }
 
-    await queuePatch({
+    queuePatch({
       workOrderNo: workOrderNo.trim(),
       workOrderTitle: workOrderTitle.trim(),
       equipmentTag: equipmentTag.trim(),
@@ -619,6 +646,7 @@ export default function NewDeferralPage() {
       safetyCriticality,
       taskCriticality,
     } as any);
+    await flushPatch();
 
     toast.success("Saved");
   }
@@ -658,10 +686,11 @@ export default function NewDeferralPage() {
       return;
     }
 
-    await queuePatch({
+    queuePatch({
       lafdStartDate: fromIsoDateInput(lafdCurrent),
       lafdEndDate: fromIsoDateInput(lafdDeferredTo),
     } as any);
+    await flushPatch();
 
     toast.success("Saved");
   }
@@ -691,27 +720,31 @@ export default function NewDeferralPage() {
   }
 
   async function saveTextTab() {
-    await queuePatch({
+    queuePatch({
       description,
       justification,
       consequence,
     } as any);
+    await flushPatch();
     toast.success("Saved");
   }
 
   async function saveMitigation() {
     if (!deferral) return;
-    const payload = mitigationRows
-      .map((m) => ({
-        mitigationText: m.mitigationText.trim(),
-        requiredDepartment: m.requiredDepartment.trim(),
-      }))
-      .filter((m) => m.mitigationText && m.requiredDepartment);
-
-    await queuePatch({ mitigations: payload });
+    const payload = serializeMitigationRows(mitigationRows);
+    queuePatch({ mitigations: payload });
     await flushPatch();
     toast.success("Mitigations saved");
   }
+
+  const onTabChange = useCallback(
+    async (next: string) => {
+      await flushRisksSave();
+      await flushPatch();
+      if (DRAFT_TABS.has(next)) setActiveTab(next as DraftTab);
+    },
+    [flushPatch, flushRisksSave],
+  );
   async function loadAttachments() {
     if (!deferral) return;
     setAttLoading(true);
@@ -970,7 +1003,13 @@ export default function NewDeferralPage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="basic" className="w-full">
+      <Tabs
+        value={activeTab}
+        onValueChange={(next) => {
+          void onTabChange(next);
+        }}
+        className="w-full"
+      >
         <TabsList className="flex flex-wrap">
           <TabsTrigger value="basic">Basic</TabsTrigger>
           <TabsTrigger value="dates">Dates</TabsTrigger>
@@ -1442,7 +1481,7 @@ export default function NewDeferralPage() {
                   size="sm"
                   variant="outline"
                   onClick={() =>
-                    setMitigationRows((prev) => [
+                    updateMitigationRows((prev) => [
                       ...prev,
                       { mitigationText: "", requiredDepartment: "" },
                     ])
@@ -1475,7 +1514,7 @@ export default function NewDeferralPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() =>
-                          setMitigationRows((prev) =>
+                          updateMitigationRows((prev) =>
                             prev.filter((_, i) => i !== index),
                           )
                         }
@@ -1492,7 +1531,7 @@ export default function NewDeferralPage() {
                     <Select
                       value={row.requiredDepartment}
                       onValueChange={(v) =>
-                        setMitigationRows((prev) =>
+                        updateMitigationRows((prev) =>
                           prev.map((r, i) =>
                             i === index ? { ...r, requiredDepartment: v } : r,
                           ),
@@ -1519,7 +1558,7 @@ export default function NewDeferralPage() {
                     <Textarea
                       value={row.mitigationText}
                       onChange={(e) =>
-                        setMitigationRows((prev) =>
+                        updateMitigationRows((prev) =>
                           prev.map((r, i) =>
                             i === index
                               ? { ...r, mitigationText: e.target.value }

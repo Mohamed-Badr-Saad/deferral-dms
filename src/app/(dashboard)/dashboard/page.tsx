@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/src/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,15 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, RefreshCw, ArrowUpRight } from "lucide-react";
-import { STATUS_LABELS, STATUS_COLORS } from "@/src/lib/constants";
-
-type CountsResponse = {
-  byStatus: Record<string, number>;
-  byDeferralRank?: { first: number; second: number; third: number };
-  byDeferralRankActive?: { first: number; second: number; third: number };
-  totals: { active: number; history: number; all: number };
-  totalMatched: number;
-};
+import { DEFERRAL_STATUS, STATUS_LABELS, STATUS_COLORS } from "@/src/lib/constants";
 
 type DeptStat = { department: string; counts: Record<string, number> };
 type RankCounter = { total: number; active: number };
@@ -26,6 +18,8 @@ type DeptStatsResponse = {
   departments: DeptStat[];
   rankCounters: Record<string, RankCounter>;
   isManagement: boolean;
+  scopeDepartment: string | null;
+  recent: Deferral[];
 };
 
 type Deferral = {
@@ -39,63 +33,31 @@ type Deferral = {
   deferralNumber?: number | null;
 };
 
-type ItemsResponse = {
-  items: Deferral[];
-  nextOffset: number | null;
-};
-
 function fmtDT(d: string | null | undefined) {
   if (!d) return "—";
   return new Date(d).toLocaleString();
 }
 
-const DASHBOARD_STATUSES = [
-  "DRAFT",
-  "SUBMITTED",
-  "IN_APPROVAL",
-  "RETURNED",
-  "REJECTED",
-  "APPROVED",
-  "COMPLETED",
-  "CLOSED",
-  "DELETED",
-  "EXPIRED",
-] as const;
+const DASHBOARD_STATUSES = DEFERRAL_STATUS.filter(
+  (status) => status !== "SUBMITTED",
+);
 
 export default function DashboardPage() {
   const [err, setErr] = useState<string | null>(null);
-  const [loadingCounts, setLoadingCounts] = useState(true);
-  const [loadingRecent, setLoadingRecent] = useState(true);
-  const [loadingDept, setLoadingDept] = useState(true);
-
-  const [recent, setRecent] = useState<Deferral[]>([]);
-  const [globalCounts, setGlobalCounts] = useState<CountsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
   const [deptStats, setDeptStats] = useState<DeptStatsResponse | null>(null);
 
   const fetchAll = useCallback(async () => {
     setErr(null);
-    setLoadingCounts(true);
-    setLoadingRecent(true);
-    setLoadingDept(true);
+    setLoading(true);
 
     try {
-      const [c, ds, r] = await Promise.all([
-        api<CountsResponse>(`/api/deferrals?mode=counts&scope=all`),
-        api<DeptStatsResponse>(`/api/dashboard/dept-stats`),
-        api<ItemsResponse>(
-          `/api/deferrals?mode=items&scope=all&pageSize=10&offset=0`,
-        ),
-      ]);
-
-      setGlobalCounts(c ?? null);
+      const ds = await api<DeptStatsResponse>(`/api/dashboard/dept-stats`);
       setDeptStats(ds ?? null);
-      setRecent(r?.items ?? []);
     } catch (e: any) {
       setErr(e?.message ?? "Failed to load dashboard");
     } finally {
-      setLoadingCounts(false);
-      setLoadingRecent(false);
-      setLoadingDept(false);
+      setLoading(false);
     }
   }, []);
 
@@ -103,16 +65,30 @@ export default function DashboardPage() {
     void fetchAll();
   }, [fetchAll]);
 
-  const rankTotal = globalCounts?.byDeferralRank ?? {
-    first: 0,
-    second: 0,
-    third: 0,
+  const statusCounts = useMemo(() => {
+    const totals = Object.fromEntries(
+      DASHBOARD_STATUSES.map((status) => [status, 0]),
+    ) as Record<string, number>;
+
+    for (const department of deptStats?.departments ?? []) {
+      for (const status of DASHBOARD_STATUSES) {
+        totals[status] += department.counts?.[status] ?? 0;
+      }
+    }
+
+    return totals;
+  }, [deptStats]);
+
+  const rankTotal = {
+    first: deptStats?.rankCounters?.["1"]?.total ?? 0,
+    second: deptStats?.rankCounters?.["2"]?.total ?? 0,
+    third: deptStats?.rankCounters?.["3"]?.total ?? 0,
   };
 
-  const rankActive = globalCounts?.byDeferralRankActive ?? {
-    first: 0,
-    second: 0,
-    third: 0,
+  const rankActive = {
+    first: deptStats?.rankCounters?.["1"]?.active ?? 0,
+    second: deptStats?.rankCounters?.["2"]?.active ?? 0,
+    third: deptStats?.rankCounters?.["3"]?.active ?? 0,
   };
 
   const rankCards = [
@@ -120,6 +96,37 @@ export default function DashboardPage() {
     { key: "second" as const, label: "2nd Deferrals" },
     { key: "third" as const, label: "3rd Deferrals" },
   ];
+
+  const scopeDepartment = deptStats?.scopeDepartment ?? null;
+  const statusCardTitle = deptStats?.isManagement
+    ? "Global status counts"
+    : scopeDepartment
+      ? `${scopeDepartment} status counts`
+      : "Department status counts";
+
+  const recentDescription = deptStats?.isManagement
+    ? "Latest updated deferrals across the system."
+    : scopeDepartment
+      ? `Latest updated deferrals in ${scopeDepartment}.`
+      : "Latest updated deferrals in your department.";
+
+  function buildDeferralsHref(options?: {
+    department?: string | null;
+    status?: string | null;
+  }) {
+    const params = new URLSearchParams();
+    params.set("scope", "all");
+
+    if (options?.department) {
+      params.set("department", options.department);
+    }
+
+    if (options?.status) {
+      params.set("status", options.status);
+    }
+
+    return `/deferrals?${params.toString()}`;
+  }
 
   return (
     <div className="space-y-8">
@@ -142,7 +149,7 @@ export default function DashboardPage() {
           <Button
             variant="outline"
             onClick={fetchAll}
-            disabled={loadingCounts || loadingRecent || loadingDept}
+            disabled={loading}
             className="gap-2"
           >
             <RefreshCw className="h-4 w-4" />
@@ -162,12 +169,18 @@ export default function DashboardPage() {
 
       <Card className="rounded-2xl">
         <CardHeader>
-          <CardTitle className="text-base">Global status counts</CardTitle>
+          <CardTitle className="text-base">{statusCardTitle}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 md:grid-cols-5">
             {DASHBOARD_STATUSES.map((s) => (
-              <Link key={s} href={`/deferrals?scope=all`}>
+              <Link
+                key={s}
+                href={buildDeferralsHref({
+                  department: scopeDepartment,
+                  status: s,
+                })}
+              >
                 <Card className="rounded-2xl hover:bg-muted/40 transition-colors">
                   <CardContent className="p-4 space-y-2">
                     <div className="flex items-center justify-between gap-2">
@@ -179,7 +192,7 @@ export default function DashboardPage() {
                       </Badge>
                     </div>
                     <div className="text-2xl font-semibold">
-                      {loadingCounts ? "…" : (globalCounts?.byStatus?.[s] ?? 0)}
+                      {loading ? "…" : (statusCounts[s] ?? 0)}
                     </div>
                   </CardContent>
                 </Card>
@@ -203,7 +216,7 @@ export default function DashboardPage() {
                     <div>
                       <div className="text-xs text-muted-foreground">Total</div>
                       <div className="text-2xl font-semibold">
-                        {loadingCounts ? "…" : rankTotal[r.key]}
+                        {loading ? "…" : rankTotal[r.key]}
                       </div>
                     </div>
                     <div>
@@ -211,7 +224,7 @@ export default function DashboardPage() {
                         Active
                       </div>
                       <div className="text-2xl font-semibold text-green-700">
-                        {loadingCounts ? "…" : rankActive[r.key]}
+                        {loading ? "…" : rankActive[r.key]}
                       </div>
                     </div>
                   </div>
@@ -232,7 +245,7 @@ export default function DashboardPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {loadingDept ? (
+          {loading ? (
             <div className="text-sm text-muted-foreground">Loading…</div>
           ) : !deptStats || deptStats.departments.length === 0 ? (
             <div className="text-sm text-muted-foreground">
@@ -243,13 +256,19 @@ export default function DashboardPage() {
               defaultValue={deptStats.departments[0]?.department}
               className="w-full"
             >
-              <TabsList className="flex flex-wrap h-auto">
-                {deptStats.departments.map((d) => (
-                  <TabsTrigger key={d.department} value={d.department}>
-                    {d.department}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
+              <div className="overflow-x-auto pb-2">
+                <TabsList className="inline-flex h-auto min-w-max gap-1 rounded-xl bg-muted/60 p-1">
+                  {deptStats.departments.map((d) => (
+                    <TabsTrigger
+                      key={d.department}
+                      value={d.department}
+                      className="whitespace-nowrap rounded-lg px-3 py-1.5"
+                    >
+                      {d.department}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
 
               {deptStats.departments.map((d) => (
                 <TabsContent
@@ -261,7 +280,10 @@ export default function DashboardPage() {
                     {DASHBOARD_STATUSES.map((s) => (
                       <Link
                         key={s}
-                        href={`/deferrals?scope=all`}
+                        href={buildDeferralsHref({
+                          department: d.department,
+                          status: s,
+                        })}
                         className="block"
                       >
                         <Card className="rounded-2xl hover:bg-muted/40 transition-colors">
@@ -294,12 +316,12 @@ export default function DashboardPage() {
           <div>
             <CardTitle className="text-base">Recent deferrals</CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
-              Latest updated deferrals across the system.
+              {recentDescription}
             </p>
           </div>
 
           <Button asChild variant="outline" className="gap-2">
-            <Link href="/deferrals?scope=all">
+            <Link href={buildDeferralsHref({ department: scopeDepartment })}>
               View all
               <ArrowUpRight className="h-4 w-4" />
             </Link>
@@ -307,14 +329,14 @@ export default function DashboardPage() {
         </CardHeader>
 
         <CardContent className="space-y-3">
-          {loadingRecent ? (
+          {loading ? (
             <div className="text-sm text-muted-foreground">Loading…</div>
-          ) : recent.length === 0 ? (
+          ) : (deptStats?.recent?.length ?? 0) === 0 ? (
             <div className="text-sm text-muted-foreground">
               No recent deferrals found.
             </div>
           ) : (
-            recent.map((d, idx) => (
+            (deptStats?.recent ?? []).map((d, idx) => (
               <div key={d.id}>
                 <Link
                   href={`/deferrals/${d.id}`}
@@ -348,7 +370,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 </Link>
-                {idx < recent.length - 1 && <Separator />}
+                {idx < (deptStats?.recent?.length ?? 0) - 1 && <Separator />}
               </div>
             ))
           )}

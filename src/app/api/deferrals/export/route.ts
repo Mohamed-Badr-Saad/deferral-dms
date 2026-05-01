@@ -113,7 +113,7 @@ export async function GET(req: Request) {
   const effectiveDepartment = effectiveDepartmentFilter(profile, f.department);
 
   if (effectiveDepartment) {
-    clauses.push(eq(deferrals.initiatorDepartment, effectiveDepartment));
+    clauses.push(ilike(deferrals.initiatorDepartment, effectiveDepartment));
   }
   if (f.deferralCode.trim()) {
     clauses.push(ilike(deferrals.deferralCode, `%${f.deferralCode.trim()}%`));

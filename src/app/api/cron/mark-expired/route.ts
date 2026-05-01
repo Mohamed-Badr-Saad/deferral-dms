@@ -1,30 +1,30 @@
 import { NextResponse } from "next/server";
-import { db } from "@/src/db";
-import { deferrals } from "@/src/db/schema";
-import { and, inArray, lt } from "drizzle-orm";
+import {
+  getCronAuthError,
+  parseJobDateInput,
+  runMarkExpired,
+} from "@/src/lib/expiry-jobs";
 
-// Call this route from a cron job (e.g. Vercel Cron, external scheduler)
-// Protect with CRON_SECRET header
-export async function POST(req: Request) {
-  const secret = req.headers.get("x-cron-secret");
-  if (secret !== process.env.CRON_SECRET)
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+async function handle(request: Request) {
+  const authError = getCronAuthError(request);
+  if (authError) {
+    return NextResponse.json({ message: authError }, { status: 401 });
+  }
 
-  const now = new Date();
+  const url = new URL(request.url);
+  const nowResult = parseJobDateInput(url.searchParams.get("at"), new Date());
+  if (nowResult.error) {
+    return NextResponse.json({ message: nowResult.error }, { status: 400 });
+  }
 
-  // Mark APPROVED and COMPLETED deferrals as EXPIRED when lafdEndDate has passed
-  const result = await db
-    .update(deferrals)
-    .set({ status: "EXPIRED", updatedAt: now } as any)
-    .where(
-      and(
-        inArray(deferrals.status, ["APPROVED", "COMPLETED"] as any),
-        lt(deferrals.lafdEndDate, now),
-      ),
-    );
+  const result = await runMarkExpired({ now: nowResult.value });
+  return NextResponse.json({ ok: true, ...result }, { status: 200 });
+}
 
-  return NextResponse.json(
-    { ok: true, markedAt: now.toISOString() },
-    { status: 200 },
-  );
+export async function GET(request: Request) {
+  return handle(request);
+}
+
+export async function POST(request: Request) {
+  return handle(request);
 }
