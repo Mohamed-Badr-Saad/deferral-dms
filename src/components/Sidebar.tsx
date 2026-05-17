@@ -44,9 +44,15 @@ export function Sidebar() {
         {/* Brand */}
         <div className="px-5 py-6">
           <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl ">
-            <Image src={IMAGES_BASE64_CODE.Rashid_Logo} alt="Rashid Logo" width={40 } height={30} className="absolute" />  
-          </div>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl ">
+              <Image
+                src={"/Rashid-icon.ico"}
+                alt="Rashid Logo"
+                width={40}
+                height={30}
+                className="absolute"
+              />
+            </div>
             <div>
               <div className="text-sm font-semibold tracking-tight">
                 Deferral DMS

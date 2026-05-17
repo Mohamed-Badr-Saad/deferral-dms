@@ -23,7 +23,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { UploadCloud, Save, ArrowRight } from "lucide-react";
 import { addDaysIso } from "@/src/lib/helper";
-import { min } from "drizzle-orm";
 import { DEPARTMENTS } from "@/src/lib/constants";
 import {
   AlertDialog,
@@ -189,7 +188,7 @@ function fromIsoDateInput(v: string) {
   return d.toISOString();
 }
 
-function ramBadgeClass(cell: string) {
+function ramBadgeClass() {
   // You can map to your RAM colors later. Keeping mild styling now.
   return "bg-muted text-foreground";
 }
@@ -202,10 +201,6 @@ export default function NewDeferralPage() {
   const [deferral, setDeferral] = useState<Deferral | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [duplicateWarning, setDuplicateWarning] = useState<null | {
-    duplicateRank: number;
-    message: string;
-  }>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attLoading, setAttLoading] = useState(false);
   const [riskRows, setRiskRows] = useState<RiskRow[]>([]);
@@ -219,13 +214,11 @@ export default function NewDeferralPage() {
     needsConfirmation: boolean;
     blocked: boolean;
   }>(null);
-  const [confirmDuplicate, setConfirmDuplicate] = useState(false);
 
   const woCheck = useDebouncedCallback(async (workOrderNo: string) => {
     const trimmed = workOrderNo.trim();
     if (!trimmed) {
       setDuplicateInfo(null);
-      setConfirmDuplicate(false);
       return;
     }
 
@@ -252,9 +245,7 @@ export default function NewDeferralPage() {
 
       // no duplicates found
       setDuplicateInfo(null);
-      setConfirmDuplicate(false);
-    } catch (e: any) {
-      console.error(e);
+    } catch {
     }
   }, 500);
 
@@ -298,7 +289,7 @@ export default function NewDeferralPage() {
 
   const queueRisksSave = useCallback(() => {
     pendingRiskRef.current = true;
-  }, [saveRisksNow]);
+  }, []);
 
   const flushRisksSave = useCallback(async () => {
     if (!pendingRiskRef.current) return;
@@ -324,7 +315,6 @@ export default function NewDeferralPage() {
   const [description, setDescription] = useState("");
   const [justification, setJustification] = useState("");
   const [consequence, setConsequence] = useState("");
-  const [busy, setBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<DraftTab>("basic");
   const [mitigationRows, setMitigationRows] = useState<MitigationRow[]>([
     { mitigationText: "", requiredDepartment: "" },
@@ -335,101 +325,6 @@ export default function NewDeferralPage() {
   const canUpload =
     deferral?.status === "DRAFT" || deferral?.status === "RETURNED";
   const uploadInputId = `upload-${deferral?.id ?? "new"}`;
-
-  async function loadAll() {
-    setLoading(true);
-    try {
-      const p = await api<{ profile: Profile }>("/api/profile");
-      setProfile(p.profile);
-
-      let d: Deferral;
-
-      if (draftId) {
-        const existing = await api<{ item: Deferral }>(
-          `/api/deferrals/${draftId}`,
-        );
-        d = existing.item;
-      } else {
-        const created = await api<{ item: Deferral }>("/api/deferrals", {
-          method: "POST",
-          json: {},
-        });
-        d = created.item;
-
-        // IMPORTANT: replace URL so refresh doesn't create again
-        router.replace(`/deferrals/new?draftId=${encodeURIComponent(d.id)}`);
-      }
-
-      setDeferral(d);
-
-      // hydrate state
-      setWorkOrderNo((d as any).workOrderNo ?? "");
-      setWorkOrderTitle((d as any).workOrderTitle ?? "");
-
-      setEquipmentTag(d.equipmentTag ?? "");
-      setEquipmentDescription(d.equipmentDescription ?? "");
-
-      setSafetyCriticality(
-        (String(d.safetyCriticality || "NO").toUpperCase() as any) ?? "NO",
-      );
-      setTaskCriticality(
-        (String(d.taskCriticality || "NO").toUpperCase() as any) ?? "NO",
-      );
-
-      setOriginalLafd(toIsoDateInput((d as any).originalLafd));
-      setLafdCurrent(toIsoDateInput(d.lafdStartDate));
-      setLafdDeferredTo(toIsoDateInput(d.lafdEndDate));
-      setLafdAddMonths(0);
-
-      setDescription(d.description ?? "");
-      setJustification(d.justification ?? "");
-      setConsequence(d.consequence ?? "");
-      setMitigationRows(
-        d.mitigations?.length
-          ? d.mitigations
-          : ([{ mitigationText: "", requiredDepartment: "" }] as any),
-      );
-      setAttachments([]);
-      setRiskRows([
-        {
-          category: "PEOPLE",
-          severity: 1,
-          likelihood: "A",
-          ramCell: "1A",
-          ramConsequenceLevel: "",
-          justification: "",
-        },
-        {
-          category: "ASSET",
-          severity: 1,
-          likelihood: "A",
-          ramCell: "1A",
-          ramConsequenceLevel: "",
-          justification: "",
-        },
-        {
-          category: "ENVIRONMENT",
-          severity: 1,
-          likelihood: "A",
-          ramCell: "1A",
-          ramConsequenceLevel: "",
-          justification: "",
-        },
-        {
-          category: "REPUTATION",
-          severity: 1,
-          likelihood: "A",
-          ramCell: "1A",
-          ramConsequenceLevel: "",
-          justification: "",
-        },
-      ]);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to start a new deferral");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   const didInitRef = useRef(false);
 
@@ -579,7 +474,7 @@ export default function NewDeferralPage() {
     (partial: any) => {
       pendingPatchRef.current = { ...pendingPatchRef.current, ...partial };
     },
-    [patchNow],
+    [],
   );
 
   const serializeMitigationRows = useCallback(
@@ -851,7 +746,6 @@ export default function NewDeferralPage() {
   }
 
   async function handleSubmit(confirmDuplicate = false) {
-    setBusy(true);
     try {
       await flushRisksSave();
       await flushPatch();
@@ -865,7 +759,7 @@ export default function NewDeferralPage() {
         .filter((m) => m.mitigationText && m.requiredDepartment);
 
       if (mitigationPayload.length > 0 && deferral) {
-        await queuePatch({ mitigations: mitigationPayload });
+        queuePatch({ mitigations: mitigationPayload });
         await flushPatch();
       }
 
@@ -882,10 +776,6 @@ export default function NewDeferralPage() {
       const data = await res.json().catch(() => ({}));
 
       if (res.status === 409 && data?.needsDuplicateConfirmation) {
-        setDuplicateWarning({
-          duplicateRank: data.duplicateRank,
-          message: data.message,
-        });
         return;
       }
 
@@ -898,12 +788,9 @@ export default function NewDeferralPage() {
       toast("Submitted", {
         description: "Deferral submitted into the workflow.",
       });
-      setDuplicateWarning(null);
       router.push(`/deferrals/${deferral?.id}`);
     } catch (e: any) {
       toast("Server error", { description: e?.message ?? "Submit failed" });
-    } finally {
-      setBusy(false);
     }
   }
   const deferredMin = lafdCurrent ? addDaysIso(lafdCurrent, 1) : undefined;
@@ -1371,7 +1258,7 @@ export default function NewDeferralPage() {
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="font-medium">{r.category}</div>
-                      <Badge className={ramBadgeClass(r.ramCell)}>
+                      <Badge className={ramBadgeClass()}>
                         {r.ramCell || "—"}
                       </Badge>
                     </div>
@@ -1699,7 +1586,6 @@ export default function NewDeferralPage() {
                   variant="outline"
                   onClick={() => {
                     setDuplicateInfo(null);
-                    setConfirmDuplicate(false);
                   }}
                 >
                   {duplicateInfo.blocked ? "Close" : "Cancel"}
@@ -1708,7 +1594,6 @@ export default function NewDeferralPage() {
                 {!duplicateInfo.blocked && (
                   <Button
                     onClick={() => {
-                      setConfirmDuplicate(true);
                       setDuplicateInfo(null);
                       handleSubmit(true);
                     }}

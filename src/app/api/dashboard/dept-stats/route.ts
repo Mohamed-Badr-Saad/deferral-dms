@@ -51,6 +51,8 @@ export async function GET() {
       ? [scopeDepartment]
       : [];
   const statusKeys = [...DEFERRAL_STATUS];
+  const emptyStatusCounts = () =>
+    Object.fromEntries(statusKeys.map((status) => [status, 0]));
   const departmentScopeWhere = scopeDepartment
     ? ilike(deferrals.initiatorDepartment, scopeDepartment)
     : undefined;
@@ -69,9 +71,7 @@ export async function GET() {
   // Group into { [department]: { [status]: number } }
   const deptMap: Record<string, Record<string, number>> = {};
   for (const department of visibleDepartments) {
-    deptMap[department] = Object.fromEntries(
-      statusKeys.map((status) => [status, 0]),
-    );
+    deptMap[department] = emptyStatusCounts();
   }
 
   for (const row of deptRows) {
@@ -79,9 +79,7 @@ export async function GET() {
     if (!departmentName) continue;
 
     if (!deptMap[departmentName]) {
-      deptMap[departmentName] = Object.fromEntries(
-        statusKeys.map((status) => [status, 0]),
-      );
+      deptMap[departmentName] = emptyStatusCounts();
     }
     deptMap[departmentName][row.status] =
       (deptMap[departmentName][row.status] ?? 0) + row.count;
@@ -93,9 +91,7 @@ export async function GET() {
   const orderedDepartments = [...visibleDepartments, ...extraDepartments];
   const departments = orderedDepartments.map((department) => ({
     department,
-    counts:
-      deptMap[department] ??
-      Object.fromEntries(statusKeys.map((status) => [status, 0])),
+    counts: deptMap[department] ?? emptyStatusCounts(),
   }));
 
   // ── Rank counters: total (all-time) ────────────────────

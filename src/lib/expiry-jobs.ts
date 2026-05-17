@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { db } from "@/src/db";
 import { deferrals, notifications, users } from "@/src/db/schema";
-import { and, between, eq, gt, ilike, inArray, lt, sql } from "drizzle-orm";
+import { and, between, eq, gt, ilike, inArray, lt } from "drizzle-orm";
 
 const EXPIRY_NOTIFICATION_TITLE_PREFIX = "Deferral expiring soon:";
 const EXPIRY_ELIGIBLE_STATUSES = ["COMPLETED"] as const;
@@ -86,7 +86,7 @@ export async function runExpiryNotifications(options: ExpiryJobOptions) {
     .from(users)
     .where(eq(users.role as any, "RELIABILITY_GM" as any));
 
-  let deferralsScanned = expiring.length;
+  const deferralsScanned = expiring.length;
   let deferralsNotified = 0;
   let notificationsCreated = 0;
   let skippedRecentlyNotified = 0;
