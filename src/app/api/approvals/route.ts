@@ -12,6 +12,13 @@ export async function GET() {
     return NextResponse.json({ message: "Permission denied" }, { status: 401 });
   }
 
+  const gmGroupScope = profile.gmGroup
+    ? or(
+        isNull(deferralApprovals.targetGmGroup),
+        eq(deferralApprovals.targetGmGroup, profile.gmGroup),
+      )
+    : isNull(deferralApprovals.targetGmGroup);
+
   const rows = await db
     .select({
       approval: deferralApprovals,
@@ -37,16 +44,9 @@ export async function GET() {
               eq(deferralApprovals.targetDepartment, profile.department),
             ),
             // Only show if targetGmGroup matches user's gmGroup (or is null/empty)
-            or(
-              isNull(deferralApprovals.targetGmGroup),
-              eq(
-                deferralApprovals.targetGmGroup as any,
-                (profile as any).gmGroup ?? "",
-              ),
-            ),
+            gmGroupScope,
           ),
         ),
-        [],
       ),
     );
 

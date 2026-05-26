@@ -17,6 +17,7 @@ import { and, asc, desc, eq, ilike, inArray } from "drizzle-orm";
 import { buildApprovalSteps } from "@/src/lib/workflow";
 import { activateFirstStep } from "@/src/lib/approval-progress";
 import { computeRamCell, computeRamConsequence } from "@/src/lib/constants";
+import type { GmGroup } from "@/src/lib/gm-group";
 
 const SubmitSchema = z.object({
   workOrderNo: z.string().min(1),
@@ -203,7 +204,7 @@ export async function POST(req: Request, ctx: Ctx) {
         .where(eq(responsibleGmMappings.department, deptRaw))
         .limit(1);
 
-      let gmGroup = mappingExact[0]?.gmGroup ?? null;
+      let gmGroup: GmGroup | null = mappingExact[0]?.gmGroup ?? null;
 
       if (!gmGroup) {
         const allMappings = await tx

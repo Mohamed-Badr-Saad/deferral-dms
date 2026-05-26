@@ -61,10 +61,10 @@ export const deferrals = pgTable("deferrals", {
   approvalCycle: integer("approval_cycle").notNull().default(0),
 
   // ✅ return-for-revision metadata
-  returnedAt: timestamp("returned_at", { withTimezone: true }).default(null),
-  returnedByRole: text("returned_by_role").default(null),
-  returnedComment: text("returned_comment").default(null),
+  returnedAt: timestamp("returned_at", { withTimezone: true }),
+  returnedByRole: text("returned_by_role"),
+  returnedComment: text("returned_comment"),
 
   // Add after returnedComment:
-  deletedReason: text("deleted_reason").default(null),
+  deletedReason: text("deleted_reason"),
 });

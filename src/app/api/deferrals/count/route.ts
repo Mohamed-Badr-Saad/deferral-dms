@@ -21,6 +21,7 @@ const HISTORY_STATUSES = [
   "EXPIRED",
 ] as const;
 const ALL_STATUSES = [...ACTIVE_STATUSES, ...HISTORY_STATUSES] as const;
+type DeferralStatus = (typeof ALL_STATUSES)[number];
 
 const QuerySchema = z.object({
   scope: z.enum(["active", "history", "all"]).optional().default("active"),
@@ -54,12 +55,12 @@ export async function GET(req: Request) {
 
   const { scope, q, department, createdFrom, createdTo } = parsed.data;
 
-  const statuses =
+  const statuses: readonly DeferralStatus[] =
     scope === "history"
-      ? (HISTORY_STATUSES as unknown as string[])
+      ? HISTORY_STATUSES
       : scope === "all"
-        ? (ALL_STATUSES as unknown as string[])
-        : (ACTIVE_STATUSES as unknown as string[]);
+        ? ALL_STATUSES
+        : ACTIVE_STATUSES;
 
   const clauses: any[] = [];
   clauses.push(inArray(deferrals.status, statuses));
