@@ -6,7 +6,10 @@ import { db } from "@/src/db";
 import { deferrals, deferralAttachments } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
 import { canViewDeferral } from "@/src/lib/authz/deferralAccess";
-import { saveUploadedFile } from "@/src/lib/file-storage";
+import {
+  isStorageConfigurationError,
+  saveUploadedFile,
+} from "@/src/lib/file-storage";
 
 export const runtime = "nodejs";
 
@@ -28,6 +31,25 @@ const ALLOWED = new Set([
 
 // ✅ per your requirement: max 25 MB
 const MAX_SIZE = 25 * 1024 * 1024;
+
+function uploadErrorResponse(error: unknown) {
+  console.error("[api/deferrals/attachments] upload failed", error);
+
+  if (isStorageConfigurationError(error)) {
+    return NextResponse.json(
+      { message: "Storage configuration error", detail: error.message },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json(
+    {
+      message: "Upload failed",
+      detail: error instanceof Error ? error.message : "Server error",
+    },
+    { status: 500 },
+  );
+}
 
 export async function GET(_req: Request, ctx: Ctx) {
   const profile = await getBusinessProfile();
@@ -128,11 +150,16 @@ if (!ALLOW_UPLOAD_STATUSES.has(String(def.status))) {
     const id = randomUUID();
     const safeName = (file.name || "attachment").replace(/[^\w.\-() ]+/g, "_");
     const filename = `${Date.now()}_${id}_${safeName}`;
-    const filePath = await saveUploadedFile({
-      pathname: `uploads/deferrals/${deferralId}/${filename}`,
-      data: buffer,
-      contentType: file.type,
-    });
+    let filePath: string;
+    try {
+      filePath = await saveUploadedFile({
+        pathname: `uploads/deferrals/${deferralId}/${filename}`,
+        data: buffer,
+        contentType: file.type,
+      });
+    } catch (error) {
+      return uploadErrorResponse(error);
+    }
 
     await db.insert(deferralAttachments).values({
       id,

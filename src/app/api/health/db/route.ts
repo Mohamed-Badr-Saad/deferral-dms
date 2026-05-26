@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/src/db";
 import { sql } from "drizzle-orm";
-import { getStorageDriver } from "@/src/lib/file-storage";
+import { getStorageConfigStatus } from "@/src/lib/file-storage";
 
 type QueryRows<T> = { rows?: T[] } | T[];
 
@@ -156,10 +156,7 @@ export async function GET() {
           databaseUrlPresent: Boolean(process.env.DATABASE_URL),
           databaseUrlPreview: maskedDatabaseUrl(),
         },
-        storage: {
-          driver: getStorageDriver(),
-          blobTokenPresent: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
-        },
+        storage: getStorageConfigStatus(),
         schema: {
           ok,
           missing,

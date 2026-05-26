@@ -3,7 +3,10 @@ import { db } from "@/src/db";
 import { users } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
 import { eq } from "drizzle-orm";
-import { saveUploadedFile } from "@/src/lib/file-storage";
+import {
+  isStorageConfigurationError,
+  saveUploadedFile,
+} from "@/src/lib/file-storage";
 
 export const runtime = "nodejs";
 
@@ -38,11 +41,31 @@ export async function POST(req: Request) {
 
   const safeUserId = profile.id;
   const filename = `signature_${Date.now()}.png`;
-  const signatureUrl = await saveUploadedFile({
-    pathname: `uploads/signatures/${safeUserId}/${filename}`,
-    data: buffer,
-    contentType: "image/png",
-  });
+  let signatureUrl: string;
+  try {
+    signatureUrl = await saveUploadedFile({
+      pathname: `uploads/signatures/${safeUserId}/${filename}`,
+      data: buffer,
+      contentType: "image/png",
+    });
+  } catch (error) {
+    console.error("[api/profile/signature] upload failed", error);
+
+    if (isStorageConfigurationError(error)) {
+      return NextResponse.json(
+        { message: "Storage configuration error", detail: error.message },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json(
+      {
+        message: "Upload failed",
+        detail: error instanceof Error ? error.message : "Server error",
+      },
+      { status: 500 },
+    );
+  }
 
   await db
     .update(users)
