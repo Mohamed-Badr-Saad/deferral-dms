@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
-import path from "path";
-import { promises as fs } from "fs";
 
 import { db } from "@/src/db";
 import { deferrals, deferralAttachments } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
 import { canViewDeferral } from "@/src/lib/authz/deferralAccess";
+import { saveUploadedFile } from "@/src/lib/file-storage";
 
 export const runtime = "nodejs";
 
@@ -101,15 +100,6 @@ if (!ALLOW_UPLOAD_STATUSES.has(String(def.status))) {
     );
   }
 
-  const dir = path.join(
-    process.cwd(),
-    "public",
-    "uploads",
-    "deferrals",
-    deferralId,
-  );
-  await fs.mkdir(dir, { recursive: true });
-
   const created: any[] = [];
 
   for (const file of files) {
@@ -138,11 +128,11 @@ if (!ALLOW_UPLOAD_STATUSES.has(String(def.status))) {
     const id = randomUUID();
     const safeName = (file.name || "attachment").replace(/[^\w.\-() ]+/g, "_");
     const filename = `${Date.now()}_${id}_${safeName}`;
-    const fullPath = path.join(dir, filename);
-
-    await fs.writeFile(fullPath, buffer);
-
-    const publicUrl = `/uploads/deferrals/${deferralId}/${filename}`;
+    const filePath = await saveUploadedFile({
+      pathname: `uploads/deferrals/${deferralId}/${filename}`,
+      data: buffer,
+      contentType: file.type,
+    });
 
     await db.insert(deferralAttachments).values({
       id,
@@ -150,7 +140,7 @@ if (!ALLOW_UPLOAD_STATUSES.has(String(def.status))) {
       fileName: safeName,
       fileType: file.type,
       fileSize: file.size,
-      filePath: publicUrl,
+      filePath,
       uploadedByUserId: profile.id,
       uploadedAt: new Date(),
     } as any);
@@ -161,7 +151,7 @@ if (!ALLOW_UPLOAD_STATUSES.has(String(def.status))) {
       fileName: safeName,
       fileType: file.type,
       fileSize: file.size,
-      filePath: publicUrl,
+      filePath,
       uploadedByUserId: profile.id,
       uploadedAt: new Date().toISOString(),
     });

@@ -3,8 +3,7 @@ import { db } from "@/src/db";
 import { users } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
 import { eq } from "drizzle-orm";
-import path from "path";
-import { promises as fs } from "fs";
+import { saveUploadedFile } from "@/src/lib/file-storage";
 
 export const runtime = "nodejs";
 
@@ -38,23 +37,21 @@ export async function POST(req: Request) {
   const buffer = Buffer.from(bytes);
 
   const safeUserId = profile.id;
-  const dir = path.join(process.cwd(), "public", "uploads", "signatures", safeUserId);
-  await fs.mkdir(dir, { recursive: true });
-
   const filename = `signature_${Date.now()}.png`;
-  const fullPath = path.join(dir, filename);
-  await fs.writeFile(fullPath, buffer);
-
-  const publicUrl = `/uploads/signatures/${safeUserId}/${filename}`;
+  const signatureUrl = await saveUploadedFile({
+    pathname: `uploads/signatures/${safeUserId}/${filename}`,
+    data: buffer,
+    contentType: "image/png",
+  });
 
   await db
     .update(users)
     .set({
-      signatureUrl: publicUrl,
+      signatureUrl,
       signatureUploadedAt: new Date(),
       updatedAt: new Date(),
     } as any)
     .where(eq(users.id, profile.id));
 
-  return NextResponse.json({ ok: true, signatureUrl: publicUrl }, { status: 200 });
+  return NextResponse.json({ ok: true, signatureUrl }, { status: 200 });
 }

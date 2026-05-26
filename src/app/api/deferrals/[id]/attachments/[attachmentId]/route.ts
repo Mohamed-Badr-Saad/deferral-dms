@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
-import path from "path";
-import { promises as fs } from "fs";
 
 import { db } from "@/src/db";
 import { deferrals, deferralAttachments } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
 import { canViewDeferral } from "@/src/lib/authz/deferralAccess";
+import { deleteStoredFile } from "@/src/lib/file-storage";
 
 export const runtime = "nodejs";
 
@@ -54,12 +53,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
 
   // attempt delete file from disk (best-effort)
   try {
-    const full = path.join(
-      process.cwd(),
-      "public",
-      att.filePath.replace(/^\//, ""),
-    );
-    await fs.unlink(full);
+    await deleteStoredFile(att.filePath);
   } catch {
     // ignore
   }

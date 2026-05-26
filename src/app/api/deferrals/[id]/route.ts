@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
-import path from "path";
-import { promises as fs } from "fs";
 import { db } from "@/src/db";
 import {
   deferrals,
@@ -15,6 +13,10 @@ import {
 } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
 import { z } from "zod";
+import {
+  deleteLocalUploadDirectory,
+  deleteStoredFile,
+} from "@/src/lib/file-storage";
 
 export const runtime = "nodejs";
 
@@ -398,22 +400,14 @@ export async function DELETE(_req: Request, ctx: Ctx) {
 
   for (const attachment of attachmentRows) {
     try {
-      const fullPath = path.join(
-        process.cwd(),
-        "public",
-        attachment.filePath.replace(/^\//, ""),
-      );
-      await fs.unlink(fullPath);
+      await deleteStoredFile(attachment.filePath);
     } catch {
       // Best-effort cleanup only. Database delete already succeeded.
     }
   }
 
   try {
-    await fs.rm(
-      path.join(process.cwd(), "public", "uploads", "deferrals", id),
-      { recursive: true, force: true },
-    );
+    await deleteLocalUploadDirectory(`uploads/deferrals/${id}`);
   } catch {
     // ignore directory cleanup errors
   }
