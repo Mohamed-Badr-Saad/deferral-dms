@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/src/db";
 import { sql } from "drizzle-orm";
-import { getStorageConfigStatus } from "@/src/lib/file-storage";
+import { verifyStorageAccess } from "@/src/lib/file-storage";
 
 type QueryRows<T> = { rows?: T[] } | T[];
 
@@ -146,7 +146,9 @@ export async function GET() {
         .map((r) => `enum:${r.enum_name}.${r.enum_value}`),
     ];
 
-    const ok = missing.length === 0;
+    const storage = await verifyStorageAccess();
+    const schemaOk = missing.length === 0;
+    const ok = schemaOk && storage.ok;
 
     return NextResponse.json(
       {
@@ -156,9 +158,9 @@ export async function GET() {
           databaseUrlPresent: Boolean(process.env.DATABASE_URL),
           databaseUrlPreview: maskedDatabaseUrl(),
         },
-        storage: getStorageConfigStatus(),
+        storage,
         schema: {
-          ok,
+          ok: schemaOk,
           missing,
           tables,
           columns,

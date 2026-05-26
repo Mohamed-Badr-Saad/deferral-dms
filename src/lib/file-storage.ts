@@ -75,17 +75,65 @@ function assertBlobConfigured() {
   }
 }
 
+function normalizeBlobError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (/store does not exist/i.test(message)) {
+    return new StorageConfigurationError(
+      "The configured Vercel Blob store does not exist. Create/connect a Blob store in Vercel, replace BLOB_READ_WRITE_TOKEN, and redeploy the app.",
+    );
+  }
+
+  if (/token|unauthorized|forbidden|access denied/i.test(message)) {
+    return new StorageConfigurationError(
+      "Vercel Blob rejected the configured token. Replace BLOB_READ_WRITE_TOKEN with a valid read/write token and redeploy the app.",
+    );
+  }
+
+  return error;
+}
+
+export async function verifyStorageAccess() {
+  const status = getStorageConfigStatus();
+  if (!status.ok || status.driver !== "vercel-blob") {
+    return { ...status, reachable: status.ok };
+  }
+
+  try {
+    assertBlobConfigured();
+    const { list } = await import("@vercel/blob");
+    await list({ limit: 1 });
+    return { ...status, reachable: true };
+  } catch (error) {
+    const normalized = normalizeBlobError(error);
+    return {
+      ...status,
+      ok: false,
+      reachable: false,
+      message:
+        normalized instanceof Error
+          ? normalized.message
+          : "Vercel Blob storage is not reachable.",
+    };
+  }
+}
+
 export async function saveUploadedFile(input: SaveFileInput) {
   const pathname = normalizePathname(input.pathname);
 
   if (getStorageDriver() === "vercel-blob") {
     assertBlobConfigured();
 
-    const { put } = await import("@vercel/blob");
-    const blob = await put(pathname, input.data, {
-      access: "public",
-      contentType: input.contentType,
-    });
+    let blob: { url: string };
+    try {
+      const { put } = await import("@vercel/blob");
+      blob = await put(pathname, input.data, {
+        access: "public",
+        contentType: input.contentType,
+      });
+    } catch (error) {
+      throw normalizeBlobError(error);
+    }
 
     return blob.url;
   }
@@ -108,8 +156,13 @@ export async function deleteStoredFile(filePath: string) {
   if (/^https?:\/\//i.test(filePath)) {
     assertBlobConfigured();
 
-    const { del } = await import("@vercel/blob");
-    await del(filePath);
+    try {
+      const { del } = await import("@vercel/blob");
+      await del(filePath);
+    } catch (error) {
+      throw normalizeBlobError(error);
+    }
+
     return;
   }
 
