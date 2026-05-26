@@ -39,10 +39,10 @@ export function ApprovalCard({
 
   return (
     <Card className={isMitigation ? "border-amber-300/60" : undefined}>
-      <CardHeader className="flex flex-row items-start justify-between gap-4">
+      <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <CardTitle className="truncate">
+            <CardTitle className="break-words">
               {row.deferral.deferralCode}
             </CardTitle>
             {isMitigation && (
@@ -87,14 +87,6 @@ export function ApprovalCard({
             </span>
           </div>
 
-          {isMitigation && (
-            <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400">
-              ⚠ Your attention is required as a mitigation department head for{" "}
-              <strong>{row.approval.targetDepartment}</strong>. Please review
-              the deferral and approve or reject the associated mitigation.
-            </div>
-          )}
-
           {p && (
             <div className="mt-2 text-xs text-muted-foreground">
               Parallel segment progress:{" "}
@@ -106,7 +98,7 @@ export function ApprovalCard({
           )}
         </div>
 
-        <Button asChild variant="secondary">
+        <Button asChild variant="secondary" className="w-full sm:w-auto">
           <Link href={`/deferrals/${row.deferral.id}`}>Open</Link>
         </Button>
       </CardHeader>
@@ -138,8 +130,9 @@ export function ApprovalCard({
           />
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <Button
+            className="w-full sm:w-auto"
             onClick={() => onApprove(row.approval.id)}
             disabled={busyId === row.approval.id}
           >
@@ -148,6 +141,7 @@ export function ApprovalCard({
 
           <Button
             variant="outline"
+            className="w-full sm:w-auto"
             onClick={() => onReturn(row.approval.id)}
             disabled={busyId === row.approval.id}
           >
@@ -156,6 +150,7 @@ export function ApprovalCard({
 
           <Button
             variant="destructive"
+            className="w-full sm:w-auto"
             onClick={() => onReject(row.approval.id)}
             disabled={busyId === row.approval.id}
           >

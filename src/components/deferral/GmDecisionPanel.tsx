@@ -81,7 +81,7 @@ export function GmDecisionPanel(props: {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-3">
+      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle>Reliability GM Decision</CardTitle>
 
         {isLocked ? (
@@ -107,7 +107,7 @@ export function GmDecisionPanel(props: {
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+        <div className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div className="space-y-1">
             <Label className="text-sm font-medium">
               Requires Technical Authority
@@ -125,7 +125,7 @@ export function GmDecisionPanel(props: {
           />
         </div>
 
-        <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+        <div className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div className="space-y-1">
             <Label className="text-sm font-medium">Requires AD HOC</Label>
             <div className="text-xs text-muted-foreground">
@@ -140,8 +140,8 @@ export function GmDecisionPanel(props: {
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button onClick={save} disabled={disabled}>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Button className="w-full sm:w-auto" onClick={save} disabled={disabled}>
             {busy ? "Saving..." : "Save Decision"}
           </Button>
 

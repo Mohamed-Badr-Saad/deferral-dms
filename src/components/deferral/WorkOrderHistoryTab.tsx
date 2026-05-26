@@ -93,12 +93,12 @@ export function WorkOrderHistoryTab(props: {
               <Link
                 key={d.id}
                 href={`/deferrals/${d.id}`}
-                className="rounded-xl border bg-background px-4 py-3 hover:bg-muted/40 transition-colors"
+                className="block min-w-0 rounded-xl border bg-background px-4 py-3 hover:bg-muted/40 transition-colors"
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <div className="font-medium truncate">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <div className="min-w-0 max-w-full truncate font-medium">
                         {d.deferralCode}
                       </div>
                       <Badge variant="secondary">{d.status}</Badge>
@@ -131,7 +131,7 @@ export function WorkOrderHistoryTab(props: {
                     </div>
                   </div>
 
-                  <div className="text-xs text-muted-foreground whitespace-nowrap">
+                  <div className="text-xs text-muted-foreground sm:whitespace-nowrap">
                     {new Date(d.updatedAt).toLocaleString()}
                   </div>
                 </div>

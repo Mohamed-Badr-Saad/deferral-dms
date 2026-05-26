@@ -31,7 +31,12 @@ export function NotificationsBell() {
   const [open, setOpen] = useState(false);
 
   const { items, unreadCount, loading, error, markRead, markAllRead, reload } =
-    useNotifications({ limit: 20, pollMs: 10_000, paused: open });
+    useNotifications({
+      limit: 20,
+      pollMs: 10_000,
+      paused: open,
+      summaryOnly: !open,
+    });
 
   const hasUnread = unreadCount > 0;
   const topItems = useMemo(() => items.slice(0, 10), [items]);
@@ -54,14 +59,14 @@ export function NotificationsBell() {
 
       <DropdownMenuContent
         align="end"
-        className="w-[420px] p-0 overflow-hidden rounded-2xl"
+        className="w-[calc(100vw-2rem)] max-w-[420px] p-0 overflow-hidden rounded-2xl"
       >
-        <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <DropdownMenuLabel className="p-0 text-sm font-semibold">
             Notifications
           </DropdownMenuLabel>
 
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             <Button
               size="sm"
               variant="ghost"
@@ -133,19 +138,19 @@ export function NotificationsBell() {
                     }
                   }}
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         {!n.isRead && (
                           <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
                         )}
-                        <div className="text-sm font-semibold truncate">
+                        <div className="min-w-0 break-words text-sm font-semibold">
                           {n.title}
                         </div>
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground line-clamp-2">
                         {n.body}
-                        <div className="text-xs text-muted-foreground truncate">
+                        <div className="break-words text-xs text-muted-foreground">
                           {n.deferralCodeSnapshot
                             ? `Deferral: ${n.deferralCodeSnapshot}`
                             : ""}

@@ -22,13 +22,19 @@ type ApiRes = {
   nextCursor: string | null;
 };
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function useNotifications(opts?: {
   limit?: number;
   pollMs?: number;
   paused?: boolean;
+  summaryOnly?: boolean;
 }) {
   const limit = opts?.limit ?? 20;
   const pollMs = opts?.pollMs ?? 10_000;
+  const summaryOnly = opts?.summaryOnly ?? false;
 
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
@@ -37,16 +43,19 @@ export function useNotifications(opts?: {
 
   const timerRef = useRef<number | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options?: { summaryOnly?: boolean }) => {
+    const onlySummary = options?.summaryOnly ?? summaryOnly;
+
     try {
+      if (!onlySummary) setLoading(true);
       setError(null);
-      const res = await fetch(
-        `/api/notifications?limit=${limit}&_ts=${Date.now()}`,
-        {
-          method: "GET",
-          cache: "no-store",
-        },
-      );
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (onlySummary) params.set("summary", "1");
+
+      const res = await fetch(`/api/notifications?${params.toString()}`, {
+        method: "GET",
+        cache: "no-store",
+      });
 
       if (!res.ok) {
         const t = await res.text().catch(() => "");
@@ -54,17 +63,17 @@ export function useNotifications(opts?: {
       }
 
       const json = (await res.json()) as ApiRes;
-      setItems(json.items ?? []);
+      if (!onlySummary) setItems(json.items ?? []);
 
       // ✅ always coerce to number
-      const n = Number((json as any).unreadCount ?? 0);
+      const n = Number(json.unreadCount ?? 0);
       setUnreadCount(Number.isFinite(n) ? n : 0);
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to load notifications");
+    } catch (e: unknown) {
+      setError(getErrorMessage(e, "Failed to load notifications"));
     } finally {
       setLoading(false);
     }
-  }, [limit]);
+  }, [limit, summaryOnly]);
 
   const markRead = useCallback(
     async (id: string) => {
@@ -87,7 +96,9 @@ export function useNotifications(opts?: {
           return;
         }
 
-        const json = (await res.json().catch(() => null)) as any;
+        const json = (await res.json().catch(() => null)) as
+          | Partial<ApiRes>
+          | null;
         if (json && typeof json.unreadCount !== "undefined") {
           setUnreadCount(Number(json.unreadCount) || 0);
         } else {
@@ -120,7 +131,9 @@ export function useNotifications(opts?: {
         return;
       }
 
-      const json = (await res.json().catch(() => null)) as any;
+      const json = (await res.json().catch(() => null)) as
+        | Partial<ApiRes>
+        | null;
       if (json && typeof json.unreadCount !== "undefined") {
         setUnreadCount(Number(json.unreadCount) || 0);
       } else {
@@ -134,18 +147,20 @@ export function useNotifications(opts?: {
   const paused = opts?.paused ?? false;
 
   useEffect(() => {
-    load();
+    load({ summaryOnly });
 
     if (pollMs > 0 && !paused) {
       timerRef.current = window.setInterval(() => {
-        load();
+        if (!document.hidden) {
+          load({ summaryOnly });
+        }
       }, pollMs);
     }
 
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current);
     };
-  }, [load, pollMs, paused]);
+  }, [load, pollMs, paused, summaryOnly]);
 
   return {
     items,

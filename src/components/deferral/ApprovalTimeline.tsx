@@ -161,10 +161,10 @@ export function ApprovalTimeline({
           approval.isActive ? "border-foreground/30" : "border-border"
         }`}
       >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="font-medium">
+        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="min-w-0 font-medium">
                 {formatStepRole(approval.stepRole)}
                 {options?.contextLabel ? (
                   <div className="text-xs text-muted-foreground">
@@ -193,13 +193,15 @@ export function ApprovalTimeline({
           </div>
 
           {approval.status === "APPROVED" ? (
-            <SignatureStamp
-              signatureUrl={approval.signatureUrlSnapshot}
-              signerName={approval.signedByNameSnapshot ?? ""}
-              signedAt={approval.signedAt}
-            />
+            <div className="w-full sm:w-auto sm:shrink-0">
+              <SignatureStamp
+                signatureUrl={approval.signatureUrlSnapshot}
+                signerName={approval.signedByNameSnapshot ?? ""}
+                signedAt={approval.signedAt}
+              />
+            </div>
           ) : (
-            <div className="text-xs text-muted-foreground">
+            <div className="text-xs text-muted-foreground sm:text-right">
               {approval.status === "PENDING" ? "Awaiting action" : "—"}
             </div>
           )}
@@ -210,7 +212,7 @@ export function ApprovalTimeline({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4">
+      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <CardTitle>Approval Timeline</CardTitle>
         {data?.parallelCounts?.total ? (
           <div className="text-xs text-muted-foreground">
@@ -261,7 +263,7 @@ export function ApprovalTimeline({
 
             {sections.parallel.length > 0 && (
               <div className="rounded-lg border p-4 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <div className="font-medium">Parallel Sign-off Group</div>
                   <div className="text-xs text-muted-foreground">
                     {data.parallelCounts.approved}/{data.parallelCounts.total}{" "}
@@ -271,10 +273,10 @@ export function ApprovalTimeline({
 
                 {sections.parallel.map((a) => (
                   <div key={a.id} className="rounded-md border p-3">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <div className="text-sm font-medium">
+                    <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="min-w-0 text-sm font-medium">
                             {formatStepRole(a.stepRole)}
                           </div>
                           <Badge variant="outline">{a.status}</Badge>
@@ -288,13 +290,15 @@ export function ApprovalTimeline({
                       </div>
 
                       {a.status === "APPROVED" ? (
-                        <SignatureStamp
-                          signatureUrl={a.signatureUrlSnapshot}
-                          signerName={a.signedByNameSnapshot ?? ""}
-                          signedAt={a.signedAt}
-                        />
+                        <div className="w-full sm:w-auto sm:shrink-0">
+                          <SignatureStamp
+                            signatureUrl={a.signatureUrlSnapshot}
+                            signerName={a.signedByNameSnapshot ?? ""}
+                            signedAt={a.signedAt}
+                          />
+                        </div>
                       ) : (
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-xs text-muted-foreground sm:text-right">
                           {a.status === "PENDING" ? "Awaiting action" : "—"}
                         </div>
                       )}

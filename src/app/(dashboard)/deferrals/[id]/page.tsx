@@ -1068,12 +1068,17 @@ export default function DeferralDetailsPage() {
     );
   }
 
+  const initiatorName = item.initiator?.name || "—";
+  const initiatorPosition = item.initiator?.position || "—";
+  const initiatorDepartment =
+    item.initiator?.department || item.initiatorDepartment || "—";
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold truncate">
+          <h1 className="break-words text-2xl font-semibold">
             {item.deferralCode}
           </h1>
 
@@ -1097,17 +1102,23 @@ export default function DeferralDetailsPage() {
             </div>
           )}
 
-          <div className="mt-2 text-xs text-muted-foreground">
-            Initiator:{" "}
-            <span className="font-medium">{profile?.name ?? "—"}</span> •{" "}
-            <span className="font-medium">{profile?.position ?? "—"}</span>
+          <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+            <div>
+              Initiator Name:{" "}
+              <span className="font-medium">{initiatorName}</span>
+            </div>
+            <div>
+              Job Title:{" "}
+              <span className="font-medium">{initiatorPosition}</span>
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
           {canEditDraft && (
             <Button
               variant={editMode ? "secondary" : "default"}
+              className="w-full sm:w-auto"
               onClick={async () => {
                 if (editMode) {
                   await flushRisksSave();
@@ -1128,7 +1139,7 @@ export default function DeferralDetailsPage() {
             <Button
               onClick={() => setShowCloseDialog(true)}
               disabled={recordActionBusy !== null}
-              className={` bg-red-500  hover:bg-red-400`}
+              className="w-full bg-red-500 hover:bg-red-400 sm:w-auto"
             >
               Close deferral
             </Button>
@@ -1138,7 +1149,7 @@ export default function DeferralDetailsPage() {
             <Button
               onClick={() => setShowSoftDeleteDialog(true)}
               disabled={recordActionBusy !== null}
-               className={` bg-red-500  hover:bg-red-400`}
+              className="w-full bg-red-500 hover:bg-red-400 sm:w-auto"
             >
               Delete with reason
             </Button>
@@ -1147,6 +1158,7 @@ export default function DeferralDetailsPage() {
           {canHardDeleteDraft && (
             <Button
               variant="destructive"
+              className="w-full sm:w-auto"
               onClick={() => setShowHardDeleteDialog(true)}
               disabled={recordActionBusy !== null}
             >
@@ -1330,20 +1342,33 @@ export default function DeferralDetailsPage() {
         onValueChange={(v) => void onViewTabChange(v)}
         className="w-full"
       >
-        <TabsList className="flex flex-wrap">
-          <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="approvals">Approvals</TabsTrigger>
-          <TabsTrigger value="history" className="gap-2">
-            Work Order History
-            {historyCount > 0 && (
-              <Badge variant="secondary" className="h-5 px-2 rounded-full">
-                {historyCount}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="deferralHistory">Deferral History</TabsTrigger>
-          <TabsTrigger value="print">Print</TabsTrigger>
-        </TabsList>
+        <div className="w-full overflow-x-auto pb-1">
+          <TabsList className="h-auto w-max min-w-full justify-start gap-1 p-1">
+            <TabsTrigger value="details" className="h-9 flex-none px-4">
+              Details
+            </TabsTrigger>
+            <TabsTrigger value="approvals" className="h-9 flex-none px-4">
+              Approvals
+            </TabsTrigger>
+            <TabsTrigger value="history" className="h-9 flex-none gap-2 px-4">
+              Work Order History
+              {historyCount > 0 && (
+                <Badge variant="secondary" className="h-5 px-2 rounded-full">
+                  {historyCount}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger
+              value="deferralHistory"
+              className="h-9 flex-none px-4"
+            >
+              Deferral History
+            </TabsTrigger>
+            <TabsTrigger value="print" className="h-9 flex-none px-4">
+              Print
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* DETAILS TAB */}
         <TabsContent value="details" className="mt-4 space-y-6">
@@ -1604,11 +1629,11 @@ export default function DeferralDetailsPage() {
                           href={a.filePath}
                           target="_blank"
                           rel="noreferrer"
-                          className="rounded-xl border bg-background px-4 py-3 hover:bg-muted/40 transition-colors"
+                          className="block min-w-0 max-w-full rounded-xl border bg-background px-4 py-3 hover:bg-muted/40 transition-colors"
                         >
-                          <div className="flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                             <div className="min-w-0">
-                              <div className="font-medium truncate">
+                              <div className="min-w-0 break-words font-medium [overflow-wrap:anywhere]">
                                 {a.fileName}
                               </div>
                               <div className="text-xs text-muted-foreground">
@@ -1616,7 +1641,7 @@ export default function DeferralDetailsPage() {
                                 {(a.fileSize / (1024 * 1024)).toFixed(2)} MB
                               </div>
                             </div>
-                            <div className="text-xs text-muted-foreground whitespace-nowrap">
+                            <div className="text-xs text-muted-foreground sm:whitespace-nowrap">
                               {new Date(a.uploadedAt).toLocaleString()}
                             </div>
                           </div>
@@ -1632,10 +1657,11 @@ export default function DeferralDetailsPage() {
           {/* EDIT MODE (tabs + explicit saves) */}
           {editMode && (
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
+              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle>Edit Deferral</CardTitle>
                 <Button
                   variant="secondary"
+                  className="w-full sm:w-auto"
                   onClick={async () => {
                     await flushRisksSave();
                     await flushPatch();
@@ -1654,14 +1680,46 @@ export default function DeferralDetailsPage() {
                   onValueChange={onTabChange}
                   className="w-full"
                 >
-                  <TabsList className="flex flex-wrap">
-                    <TabsTrigger value="basic">Basic</TabsTrigger>
-                    <TabsTrigger value="dates">Dates</TabsTrigger>
-                    <TabsTrigger value="text">Description</TabsTrigger>
-                    <TabsTrigger value="risk">Associated Risk</TabsTrigger>
-                    <TabsTrigger value="mitigation">Mitigation</TabsTrigger>
-                    <TabsTrigger value="attachments">Attachments</TabsTrigger>
-                  </TabsList>
+                  <div className="w-full overflow-x-auto pb-1">
+                    <TabsList className="h-auto w-max min-w-full justify-start gap-1 p-1">
+                      <TabsTrigger
+                        value="basic"
+                        className="h-9 flex-none px-4"
+                      >
+                        Basic
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="dates"
+                        className="h-9 flex-none px-4"
+                      >
+                        Dates
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="text"
+                        className="h-9 flex-none px-4"
+                      >
+                        Description
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="risk"
+                        className="h-9 flex-none px-4"
+                      >
+                        Associated Risk
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="mitigation"
+                        className="h-9 flex-none px-4"
+                      >
+                        Mitigation
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="attachments"
+                        className="h-9 flex-none px-4"
+                      >
+                        Attachments
+                      </TabsTrigger>
+                    </TabsList>
+                  </div>
 
                   {/* BASIC */}
                   <TabsContent value="basic" className="mt-4 space-y-4">
@@ -1960,12 +2018,13 @@ export default function DeferralDetailsPage() {
 
                   {/* RISK */}
                   <TabsContent value="risk" className="mt-4 space-y-4">
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="text-sm text-muted-foreground">
                         Per-category RAM (People/Asset/Environment/Reputation)
                       </div>
                       <Button
                         size="sm"
+                        className="w-full sm:w-auto"
                         onClick={saveRisks}
                         disabled={!canEditDraft || riskSaving}
                       >
@@ -2121,7 +2180,7 @@ export default function DeferralDetailsPage() {
                         key={row.id ?? index}
                         className="rounded-xl border p-4 space-y-3"
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <span className="text-sm font-medium text-muted-foreground">
                             Mitigation {index + 1}
                           </span>
@@ -2130,6 +2189,7 @@ export default function DeferralDetailsPage() {
                               type="button"
                               variant="ghost"
                               size="sm"
+                              className="w-full sm:w-auto"
                               onClick={() =>
                                 updateMitigationRows((prev) =>
                                   prev.filter((_, i) => i !== index),
@@ -2254,11 +2314,11 @@ export default function DeferralDetailsPage() {
                             href={a.filePath}
                             target="_blank"
                             rel="noreferrer"
-                            className="rounded-xl border bg-background px-4 py-3 hover:bg-muted/40 transition-colors"
+                            className="block min-w-0 max-w-full rounded-xl border bg-background px-4 py-3 hover:bg-muted/40 transition-colors"
                           >
-                            <div className="flex items-center justify-between gap-3">
+                            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                               <div className="min-w-0">
-                                <div className="font-medium truncate">
+                                <div className="min-w-0 break-words font-medium [overflow-wrap:anywhere]">
                                   {a.fileName}
                                 </div>
                                 <div className="text-xs text-muted-foreground">
@@ -2266,7 +2326,7 @@ export default function DeferralDetailsPage() {
                                   {(a.fileSize / (1024 * 1024)).toFixed(2)} MB
                                 </div>
                               </div>
-                              <div className="text-xs text-muted-foreground whitespace-nowrap">
+                              <div className="text-xs text-muted-foreground sm:whitespace-nowrap">
                                 {new Date(a.uploadedAt).toLocaleString()}
                               </div>
                             </div>

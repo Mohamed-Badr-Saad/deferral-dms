@@ -34,21 +34,20 @@ export function UserMenu() {
     window.location.replace("/login");
   }
 
-  const Roles = {
-  DEPARTMENT_HEAD: "Department Head",
-  RELIABILITY_ENGINEER: "Reliability Engineer",
-  RELIABILITY_GM: "Reliability GM",
-  RESPONSIBLE_GM: "Responsible GM",
-  PLANNING_ENGINEER: "Planning Engineer",
-  ENGINEER_APPLICANT: "Engineer (Applicant)",
-  SOD: "SOD",
-  DFGM: "DFGM",
-  TECHNICAL_AUTHORITY: "Technical Authority",
-  AD_HOC: "AD HOC",
-  PLANNING_SUPERVISOR_ENGINEER: "Planning Supervisor Engineer",
-  ADMIN: "Admin",
-};
-
+  const roles: Record<string, string> = {
+    DEPARTMENT_HEAD: "Department Head",
+    RELIABILITY_ENGINEER: "Reliability Engineer",
+    RELIABILITY_GM: "Reliability GM",
+    RESPONSIBLE_GM: "Responsible GM",
+    PLANNING_ENGINEER: "Planning Engineer",
+    ENGINEER_APPLICANT: "Engineer (Applicant)",
+    SOD: "SOD",
+    DFGM: "DFGM",
+    TECHNICAL_AUTHORITY: "Technical Authority",
+    AD_HOC: "AD HOC",
+    PLANNING_SUPERVISOR_ENGINEER: "Planning Supervisor Engineer",
+    ADMIN: "Admin",
+  };
 
   return (
     <DropdownMenu>
@@ -65,17 +64,22 @@ export function UserMenu() {
               {loading ? "Loading…" : (profile?.name ?? "User")}
             </div>
             <div className="text-xs text-muted-foreground">
-              {Roles[profile?.role ?? ""]}
+              {roles[profile?.role ?? ""] ?? ""}
             </div>
           </div>
         </div>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-64 rounded-2xl">
+      <DropdownMenuContent
+        align="end"
+        className="w-[calc(100vw-2rem)] max-w-[16rem] rounded-2xl"
+      >
         <DropdownMenuLabel>Account</DropdownMenuLabel>
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem disabled>{profile?.email ?? "—"}</DropdownMenuItem>
+        <DropdownMenuItem disabled className="break-all">
+          {profile?.email ?? "—"}
+        </DropdownMenuItem>
 
         <DropdownMenuSeparator />
 

@@ -231,8 +231,8 @@ export default function ProfilePage() {
       </Card>
 
       <Card className="rounded-2xl border bg-card/80 backdrop-blur">
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <div>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <CardTitle className="text-base">Signature</CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
               Used for approvals where your signature is required.
@@ -251,7 +251,7 @@ export default function ProfilePage() {
                 alt="signature"
                 width={420}
                 height={64}
-                className="h-16 w-auto max-w-[420px] object-contain"
+                className="h-16 w-full max-w-[420px] object-contain sm:w-auto"
               />
             ) : (
               <div className="text-sm text-muted-foreground">

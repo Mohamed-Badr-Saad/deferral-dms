@@ -8,6 +8,13 @@ export type Deferral = {
   workOrderTitle: string;
   initiatorUserId: string;
   initiatorDepartment: string;
+  initiator?: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    department: string | null;
+    position: string | null;
+  } | null;
 
   equipmentTag: string;
   equipmentDescription: string;
@@ -60,14 +67,40 @@ export type ApprovalRow = {
   id: string;
   deferralId: string;
   stepOrder: number;
+  sequenceNo?: number;
   stepRole: string;
   status: ApprovalStatus;
+  decision?: string;
   isActive: boolean;
   comment: string;
   assignedUserId?: string | null;
   targetDepartment?: string | null;
   targetGmGroup?: string | null;
   signedAt: string | null;
+  actedAt?: string | null;
+  approver?: {
+    name?: string | null;
+    email?: string | null;
+    role?: string | null;
+    department?: string | null;
+  } | null;
+};
+
+export type MitigationRow = {
+  id?: string;
+  mitigationText: string;
+  requiredDepartment: string;
+};
+
+export type MeResponse = {
+  user: Profile;
+};
+
+export type DeferralDetail = Deferral & {
+  initiatorId?: string;
+  deleteReason?: string | null;
+  workOrderLink?: { deferralNumber?: number | null } | null;
+  approvals?: ApprovalRow[];
 };
 
 export type RiskCategory = "PEOPLE" | "ASSET" | "ENVIRONMENT" | "REPUTATION";

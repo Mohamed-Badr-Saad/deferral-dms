@@ -183,11 +183,11 @@ export default function DashboardPage() {
               >
                 <Card className="rounded-2xl hover:bg-muted/40 transition-colors">
                   <CardContent className="p-4 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-medium truncate">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0 text-sm font-medium">
                         {STATUS_LABELS[s]}
                       </div>
-                      <Badge className={STATUS_COLORS[s]}>
+                      <Badge className={`${STATUS_COLORS[s]} shrink-0`}>
                         {STATUS_LABELS[s]}
                       </Badge>
                     </div>
@@ -288,11 +288,11 @@ export default function DashboardPage() {
                       >
                         <Card className="rounded-2xl hover:bg-muted/40 transition-colors">
                           <CardContent className="p-4 space-y-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="text-sm font-medium truncate">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="min-w-0 text-sm font-medium">
                                 {STATUS_LABELS[s]}
                               </div>
-                              <Badge className={STATUS_COLORS[s]}>
+                              <Badge className={`${STATUS_COLORS[s]} shrink-0`}>
                                 {STATUS_LABELS[s]}
                               </Badge>
                             </div>
@@ -312,15 +312,15 @@ export default function DashboardPage() {
       </Card>
 
       <Card className="rounded-2xl">
-        <CardHeader className="flex flex-row items-center justify-between gap-3">
-          <div>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <CardTitle className="text-base">Recent deferrals</CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
               {recentDescription}
             </p>
           </div>
 
-          <Button asChild variant="outline" className="gap-2">
+          <Button asChild variant="outline" className="w-full gap-2 sm:w-auto">
             <Link href={buildDeferralsHref({ department: scopeDepartment })}>
               View all
               <ArrowUpRight className="h-4 w-4" />
@@ -340,20 +340,20 @@ export default function DashboardPage() {
               <div key={d.id}>
                 <Link
                   href={`/deferrals/${d.id}`}
-                  className="block rounded-xl hover:bg-muted/40 transition-colors"
+                  className="block min-w-0 rounded-xl hover:bg-muted/40 transition-colors"
                 >
-                  <div className="flex items-center justify-between gap-4 p-3">
+                  <div className="flex min-w-0 flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="font-medium truncate">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <div className="min-w-0 max-w-full truncate font-medium">
                           {d.deferralCode}
                         </div>
-                        <Badge className={STATUS_COLORS[d.status]}>
+                        <Badge className={`${STATUS_COLORS[d.status]} shrink-0`}>
                           {STATUS_LABELS[d.status]}
                         </Badge>
                       </div>
 
-                      <div className="text-sm text-muted-foreground truncate mt-1">
+                      <div className="mt-1 break-words text-sm text-muted-foreground">
                         Department: {d.initiatorDepartment}
                         {d.equipmentTag ? ` • ${d.equipmentTag}` : ""}
                         {d.deferralNumber
@@ -362,7 +362,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
-                    <div className="text-right text-xs text-muted-foreground whitespace-nowrap">
+                    <div className="text-xs text-muted-foreground sm:whitespace-nowrap sm:text-right">
                       Updated
                       <div className="font-medium text-foreground">
                         {fmtDT(d.updatedAt)}

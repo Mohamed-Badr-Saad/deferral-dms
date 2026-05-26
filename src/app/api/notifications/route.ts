@@ -19,6 +19,27 @@ export async function GET(req: Request) {
 
   const cursor = url.searchParams.get("cursor");
   const cursorDate = cursor ? new Date(cursor) : null;
+  const summaryOnly = url.searchParams.get("summary") === "1";
+
+  // Postgres count(*) often returns string -> cast to number
+  const unreadAgg = await db
+    .select({ count: sql<string>`count(*)` })
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.userId, profile.id),
+        eq(notifications.isRead, false),
+      ),
+    );
+
+  const unreadCount = Number(unreadAgg?.[0]?.count ?? 0);
+
+  if (summaryOnly) {
+    return NextResponse.json(
+      { items: [], unreadCount, nextCursor: null },
+      { status: 200 },
+    );
+  }
 
   const whereClause = cursorDate
     ? and(
@@ -37,23 +58,9 @@ export async function GET(req: Request) {
   const hasMore = rows.length > limit;
   const items = hasMore ? rows.slice(0, limit) : rows;
 
+  const lastItem = items[items.length - 1];
   const nextCursor =
-    hasMore && items.length
-      ? ((items[items.length - 1] as any).createdAt?.toISOString?.() ?? null)
-      : null;
-
-  // Postgres count(*) often returns string -> cast to number
-  const unreadAgg = await db
-    .select({ count: sql<string>`count(*)` })
-    .from(notifications)
-    .where(
-      and(
-        eq(notifications.userId, profile.id),
-        eq(notifications.isRead, false),
-      ),
-    );
-
-  const unreadCount = Number(unreadAgg?.[0]?.count ?? 0);
+    hasMore && lastItem ? (lastItem.createdAt?.toISOString?.() ?? null) : null;
 
   return NextResponse.json({ items, unreadCount, nextCursor }, { status: 200 });
 }

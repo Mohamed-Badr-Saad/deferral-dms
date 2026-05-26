@@ -45,6 +45,7 @@ type UserRow = {
   department: string;
   position: string;
   role: UserRole;
+  gmGroup: GmGroup;
   signatureUrl?: string | null;
   signatureUploadedAt?: string | null;
 };
@@ -232,16 +233,22 @@ export default function AdminPage() {
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
-        <TabsList>
-          <TabsTrigger value="users">Users & Roles</TabsTrigger>
-          <TabsTrigger value="mappings">Responsible GM Mappings</TabsTrigger>
-        </TabsList>
+        <div className="w-full overflow-x-auto pb-1">
+          <TabsList className="h-auto w-max min-w-full justify-start gap-1 p-1">
+            <TabsTrigger value="users" className="h-9 flex-none px-4">
+              Users & Roles
+            </TabsTrigger>
+            <TabsTrigger value="mappings" className="h-9 flex-none px-4">
+              Responsible GM Mappings
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="users" className="mt-4">
           <Card>
             <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <CardTitle className="text-base">Users</CardTitle>
-              <div className="flex gap-2">
+              <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row">
                 <Input
                   value={uq}
                   onChange={(e) => setUq(e.target.value)}
@@ -250,6 +257,7 @@ export default function AdminPage() {
                 />
                 <Button
                   variant="secondary"
+                  className="w-full md:w-auto"
                   onClick={loadUsers}
                   disabled={usersLoading}
                 >
@@ -265,8 +273,8 @@ export default function AdminPage() {
                   No users found.
                 </div>
               ) : (
-                <div className="rounded-lg border">
-                  <Table>
+                <div className="overflow-x-auto rounded-lg border">
+                  <Table className="min-w-[920px]">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Email</TableHead>
@@ -346,7 +354,7 @@ export default function AdminPage() {
               <CardTitle className="text-base">
                 Responsible GM Mappings
               </CardTitle>
-              <div className="flex gap-2">
+              <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row">
                 <Input
                   value={mq}
                   onChange={(e) => setMq(e.target.value)}
@@ -355,6 +363,7 @@ export default function AdminPage() {
                 />
                 <Button
                   variant="secondary"
+                  className="w-full md:w-auto"
                   onClick={loadMappings}
                   disabled={mLoading}
                 >
@@ -363,7 +372,7 @@ export default function AdminPage() {
 
                 <Dialog open={createOpen} onOpenChange={setCreateOpen}>
                   <DialogTrigger asChild>
-                    <Button>Add</Button>
+                    <Button className="w-full md:w-auto">Add</Button>
                   </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
@@ -425,8 +434,8 @@ export default function AdminPage() {
                   No mappings found.
                 </div>
               ) : (
-                <div className="rounded-lg border">
-                  <Table>
+                <div className="overflow-x-auto rounded-lg border">
+                  <Table className="min-w-[640px]">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Department</TableHead>

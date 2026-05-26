@@ -63,7 +63,7 @@ export function SignatureCropDialog(props: {
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="relative h-[380px] w-full overflow-hidden rounded-xl border bg-muted/30">
+          <div className="relative h-[260px] w-full overflow-hidden rounded-xl border bg-muted/30 sm:h-[380px]">
             <Cropper
               image={props.imageSrc}
               crop={crop}

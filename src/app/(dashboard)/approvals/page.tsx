@@ -171,17 +171,22 @@ export default function ApprovalsPage() {
       <Tabs
         defaultValue={mitigationPending.length > 0 ? "mitigation" : "pending"}
       >
-        <TabsList>
-          <TabsTrigger value="pending">
-            Department ({deptPending.length})
-          </TabsTrigger>
-          <TabsTrigger value="mitigation" className="relative">
-            Mitigation ({mitigationPending.length})
-          </TabsTrigger>
-          <TabsTrigger value="history">
-            Approved by me ({history.length})
-          </TabsTrigger>
-        </TabsList>
+        <div className="w-full overflow-x-auto pb-1">
+          <TabsList className="h-auto w-max min-w-full justify-start gap-1 p-1">
+            <TabsTrigger value="pending" className="h-9 flex-none px-4">
+              Department ({deptPending.length})
+            </TabsTrigger>
+            <TabsTrigger
+              value="mitigation"
+              className="relative h-9 flex-none px-4"
+            >
+              Mitigation ({mitigationPending.length})
+            </TabsTrigger>
+            <TabsTrigger value="history" className="h-9 flex-none px-4">
+              Approved by me ({history.length})
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* DEPARTMENT APPROVALS */}
         <TabsContent value="pending" className="space-y-4">
@@ -280,9 +285,11 @@ export default function ApprovalsPage() {
           ) : (
             history.map((row) => (
               <Card key={row.approval.id}>
-                <CardHeader className="flex flex-row items-start justify-between gap-4">
-                  <div>
-                    <CardTitle>{row.deferral.deferralCode}</CardTitle>
+                <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <CardTitle className="break-words">
+                      {row.deferral.deferralCode}
+                    </CardTitle>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                       <span>
                         Approved as:{" "}
@@ -308,7 +315,7 @@ export default function ApprovalsPage() {
                       </span>
                     </div>
                   </div>
-                  <Button asChild variant="secondary">
+                  <Button asChild variant="secondary" className="w-full sm:w-auto">
                     <Link href={`/deferrals/${row.deferral.id}`}>Open</Link>
                   </Button>
                 </CardHeader>

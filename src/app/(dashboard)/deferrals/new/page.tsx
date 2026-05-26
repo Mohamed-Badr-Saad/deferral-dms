@@ -837,13 +837,16 @@ export default function NewDeferralPage() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight truncate">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">
               New Deferral
             </h1>
-            <Badge variant="secondary" className="rounded-xl">
+            <Badge
+              variant="secondary"
+              className="max-w-full rounded-xl break-words"
+            >
               {deferral.deferralCode}
             </Badge>
           </div>
@@ -853,9 +856,10 @@ export default function NewDeferralPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex w-full items-center gap-2 sm:w-auto">
           <Button
             variant="secondary"
+            className="w-full sm:w-auto"
             onClick={async () => {
               await flushRisksSave();
               await flushPatch();
@@ -897,21 +901,40 @@ export default function NewDeferralPage() {
         }}
         className="w-full"
       >
-        <TabsList className="flex flex-wrap">
-          <TabsTrigger value="basic">Basic</TabsTrigger>
-          <TabsTrigger value="dates">Dates</TabsTrigger>
-          <TabsTrigger value="text">Description</TabsTrigger>
-          <TabsTrigger value="risk">Associated Risk</TabsTrigger>
-          <TabsTrigger value="mitigation">Mitigation</TabsTrigger>
-          <TabsTrigger value="attachments">Attachments</TabsTrigger>
-        </TabsList>
+        <div className="w-full overflow-x-auto pb-1">
+          <TabsList className="h-auto w-max min-w-full justify-start gap-1 p-1">
+            <TabsTrigger value="basic" className="h-9 flex-none px-4">
+              Basic
+            </TabsTrigger>
+            <TabsTrigger value="dates" className="h-9 flex-none px-4">
+              Dates
+            </TabsTrigger>
+            <TabsTrigger value="text" className="h-9 flex-none px-4">
+              Description
+            </TabsTrigger>
+            <TabsTrigger value="risk" className="h-9 flex-none px-4">
+              Associated Risk
+            </TabsTrigger>
+            <TabsTrigger value="mitigation" className="h-9 flex-none px-4">
+              Mitigation
+            </TabsTrigger>
+            <TabsTrigger value="attachments" className="h-9 flex-none px-4">
+              Attachments
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* BASIC */}
         <TabsContent value="basic" className="mt-4">
           <Card className="rounded-2xl">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-base">Basic Information</CardTitle>
-              <Button size="sm" onClick={saveBasic} disabled={saving}>
+              <Button
+                size="sm"
+                className="w-full sm:w-auto"
+                onClick={saveBasic}
+                disabled={saving}
+              >
                 <Save className="mr-2 h-4 w-4" />
                 {saving ? "Saving..." : "Save"}
               </Button>
@@ -1043,9 +1066,14 @@ export default function NewDeferralPage() {
         {/* DATES */}
         <TabsContent value="dates" className="mt-4">
           <Card className="rounded-2xl">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-base">Dates</CardTitle>
-              <Button size="sm" onClick={saveDates} disabled={saving}>
+              <Button
+                size="sm"
+                className="w-full sm:w-auto"
+                onClick={saveDates}
+                disabled={saving}
+              >
                 <Save className="mr-2 h-4 w-4" />
                 {saving ? "Saving..." : "Save"}
               </Button>
@@ -1168,11 +1196,16 @@ export default function NewDeferralPage() {
         {/* TEXT */}
         <TabsContent value="text" className="mt-4">
           <Card className="rounded-2xl">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-base">
                 Description / Justification / Consequence
               </CardTitle>
-              <Button size="sm" onClick={saveTextTab} disabled={saving}>
+              <Button
+                size="sm"
+                className="w-full sm:w-auto"
+                onClick={saveTextTab}
+                disabled={saving}
+              >
                 <Save className="mr-2 h-4 w-4" />
                 {saving ? "Saving..." : "Save"}
               </Button>
@@ -1228,10 +1261,11 @@ export default function NewDeferralPage() {
         {/* RISK */}
         <TabsContent value="risk" className="mt-4">
           <Card className="rounded-2xl">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-base">Associated Risk (RAM)</CardTitle>
               <Button
                 size="sm"
+                className="w-full sm:w-auto"
                 onClick={() => saveRisksNow(false)}
                 disabled={riskSaving}
               >
@@ -1361,12 +1395,13 @@ export default function NewDeferralPage() {
         {/* MITIGATION */}
         <TabsContent value="mitigation" className="mt-4">
           <Card className="rounded-2xl">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-base">Mitigation</CardTitle>
-              <div className="flex items-center gap-2">
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
                 <Button
                   size="sm"
                   variant="outline"
+                  className="w-full sm:w-auto"
                   onClick={() =>
                     updateMitigationRows((prev) => [
                       ...prev,
@@ -1376,7 +1411,12 @@ export default function NewDeferralPage() {
                 >
                   + Add
                 </Button>
-                <Button size="sm" onClick={saveMitigation} disabled={saving}>
+                <Button
+                  size="sm"
+                  className="w-full sm:w-auto"
+                  onClick={saveMitigation}
+                  disabled={saving}
+                >
                   <Save className="mr-2 h-4 w-4" />
                   {saving ? "Saving..." : "Save"}
                 </Button>
@@ -1391,7 +1431,7 @@ export default function NewDeferralPage() {
 
               {mitigationRows.map((row, index) => (
                 <div key={index} className="rounded-xl border p-4 space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <span className="text-sm font-medium text-muted-foreground">
                       Mitigation {index + 1}
                     </span>
@@ -1400,6 +1440,7 @@ export default function NewDeferralPage() {
                         type="button"
                         variant="ghost"
                         size="sm"
+                        className="w-full sm:w-auto"
                         onClick={() =>
                           updateMitigationRows((prev) =>
                             prev.filter((_, i) => i !== index),
@@ -1471,14 +1512,17 @@ export default function NewDeferralPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="rounded-xl border bg-muted/30 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
                     <div className="font-medium">Upload files</div>
                     <div className="text-xs text-muted-foreground">
                       PDF / PNG / JPG / WEBP — max 25MB each.
                     </div>
                   </div>
-                  <label htmlFor={uploadInputId} className="cursor-pointer">
+                  <label
+                    htmlFor={uploadInputId}
+                    className="w-full cursor-pointer sm:w-auto"
+                  >
                     <input
                       id={uploadInputId}
                       type="file"
@@ -1495,7 +1539,7 @@ export default function NewDeferralPage() {
                       }}
                     />
 
-                    <Button asChild disabled={!canUpload}>
+                    <Button asChild disabled={!canUpload} className="w-full sm:w-auto">
                       <label htmlFor={uploadInputId} className="cursor-pointer">
                         <UploadCloud className="mr-2 h-4 w-4" />
                         Upload
@@ -1529,11 +1573,11 @@ export default function NewDeferralPage() {
                       href={a.filePath}
                       target="_blank"
                       rel="noreferrer"
-                      className="rounded-xl border bg-background px-4 py-3 hover:bg-muted/40 transition-colors"
+                      className="block min-w-0 max-w-full rounded-xl border bg-background px-4 py-3 hover:bg-muted/40 transition-colors"
                     >
-                      <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                         <div className="min-w-0">
-                          <div className="font-medium truncate">
+                          <div className="min-w-0 break-words font-medium [overflow-wrap:anywhere]">
                             {a.fileName}
                           </div>
                           <div className="text-xs text-muted-foreground">
@@ -1541,7 +1585,7 @@ export default function NewDeferralPage() {
                             {(a.fileSize / (1024 * 1024)).toFixed(2)} MB
                           </div>
                         </div>
-                        <div className="text-xs text-muted-foreground whitespace-nowrap">
+                        <div className="text-xs text-muted-foreground sm:whitespace-nowrap">
                           {new Date(a.uploadedAt).toLocaleString()}
                         </div>
                       </div>

@@ -21,10 +21,16 @@ export default function MitigationsEditor({
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <Label className="text-sm font-medium">Mitigations</Label>
         {canEdit && (
-          <Button type="button" variant="outline" size="sm" onClick={onAdd}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full sm:w-auto"
+            onClick={onAdd}
+          >
             Add mitigation
           </Button>
         )}
@@ -67,6 +73,7 @@ export default function MitigationsEditor({
                   type="button"
                   variant="ghost"
                   size="sm"
+                  className="w-full sm:w-auto"
                   onClick={() => onRemove(index)}
                 >
                   Remove

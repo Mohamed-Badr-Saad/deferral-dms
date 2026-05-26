@@ -89,10 +89,16 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function isDeferralStatus(
+  value: string,
+): value is (typeof DEFERRAL_STATUS)[number] {
+  return DEFERRAL_STATUS.includes(value as (typeof DEFERRAL_STATUS)[number]);
+}
+
 export default function DeferralsPage() {
   const searchParams = useSearchParams();
 
-  const qsScope = (searchParams.get("scope") ?? "active").toLowerCase();
+  const qsScope = (searchParams.get("scope") ?? "all").toLowerCase();
   const qsDepartment = (searchParams.get("department") ?? "").trim();
   const qsStatus = (searchParams.get("status") ?? "").toUpperCase();
   const qsDeferralRank = (searchParams.get("deferralRank") ?? "").trim();
@@ -100,7 +106,7 @@ export default function DeferralsPage() {
   const initialScope: Scope =
     qsScope === "history" ? "history" : qsScope === "all" ? "all" : "active";
   const initialStatus =
-    qsStatus && DEFERRAL_STATUS.includes(qsStatus as any) ? qsStatus : "ALL";
+    qsStatus && isDeferralStatus(qsStatus) ? qsStatus : "ALL";
   const initialDeferralRank =
     qsDeferralRank === "1" || qsDeferralRank === "2" || qsDeferralRank === "3"
       ? qsDeferralRank
@@ -893,8 +899,8 @@ export default function DeferralsPage() {
 
       {/* Results */}
       <Card className="rounded-2xl">
-        <CardHeader className="flex flex-row items-start justify-between gap-3">
-          <div className="flex flex-col gap-2">
+        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 flex-col gap-2">
             <CardTitle className="text-base">Results</CardTitle>
             <p className="text-sm text-muted-foreground">
               Results are ordered by <b>Updated At</b> (newest first).
@@ -907,9 +913,10 @@ export default function DeferralsPage() {
             )}
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
             <Button
               variant="outline"
+              className="w-full sm:w-auto"
               onClick={exportCsv}
               disabled={!appliedFilters || loadingItems || loadingMore}
             >
@@ -918,6 +925,7 @@ export default function DeferralsPage() {
 
             <Button
               variant="outline"
+              className="w-full sm:w-auto"
               onClick={refreshResults}
               disabled={!appliedFilters || loadingItems || loadingMore}
             >
@@ -942,19 +950,23 @@ export default function DeferralsPage() {
           ) : (
             <div className="grid gap-3">
               {items.map((d) => (
-                <Link key={d.id} href={`/deferrals/${d.id}`} className="block">
+                <Link
+                  key={d.id}
+                  href={`/deferrals/${d.id}`}
+                  className="block min-w-0"
+                >
                   <Card className="rounded-2xl hover:bg-muted/40 transition-colors">
-                    <CardContent className="p-5 flex items-center justify-between gap-4">
+                    <CardContent className="flex min-w-0 flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-5">
                       <div className="min-w-0">
-                        <div className="flex items-center gap-3">
-                          <div className="font-medium truncate">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+                          <div className="min-w-0 max-w-full truncate font-medium">
                             {d.deferralCode}
                           </div>
-                          <Badge className={STATUS_COLORS[d.status]}>
+                          <Badge className={`${STATUS_COLORS[d.status]} shrink-0`}>
                             {STATUS_LABELS[d.status]}
                           </Badge>
                         </div>
-                        <div className="text-sm text-muted-foreground truncate">
+                        <div className="mt-1 text-sm text-muted-foreground break-words">
                           Department: {d.initiatorDepartment}
                           {d.equipmentTag ? ` • ${d.equipmentTag}` : ""}
                           {d.deferralNumber
@@ -962,7 +974,7 @@ export default function DeferralsPage() {
                             : ""}
                         </div>
                       </div>
-                      <div className="text-xs text-muted-foreground whitespace-nowrap text-right">
+                      <div className="text-xs text-muted-foreground sm:whitespace-nowrap sm:text-right">
                         Updated
                         <div className="font-medium text-foreground">
                           {new Date(d.updatedAt).toLocaleString()}

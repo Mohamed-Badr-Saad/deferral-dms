@@ -5,10 +5,6 @@ import { deferralApprovals, deferrals } from "@/src/db/schema";
 import { getBusinessProfile } from "@/src/lib/authz";
 import { and, eq, or, isNull, desc, asc, inArray } from "drizzle-orm";
 
-function normalizeDepartment(input: string) {
-  return (input ?? "").trim().replace(/\s+/g, " ").toLowerCase();
-}
-
 const PARALLEL_ROLES = ["RESPONSIBLE_GM", "SOD", "DFGM"] as const;
 
 export async function GET() {
@@ -16,6 +12,13 @@ export async function GET() {
   if (!profile) {
     return NextResponse.json({ message: "Permission denied" }, { status: 401 });
   }
+
+  const gmGroupScope = profile.gmGroup
+    ? or(
+        isNull(deferralApprovals.targetGmGroup),
+        eq(deferralApprovals.targetGmGroup, profile.gmGroup),
+      )
+    : isNull(deferralApprovals.targetGmGroup);
 
   const pendingRows = await db
     .select({
@@ -41,10 +44,7 @@ export async function GET() {
         ),
 
         // ✅ GM group scope (if present)
-        or(
-          isNull(deferralApprovals.targetGmGroup),
-          eq(deferralApprovals.targetGmGroup, profile.gmGroup),
-        ),
+        gmGroupScope,
       ),
     )
     .orderBy(desc(deferrals.updatedAt), asc(deferralApprovals.stepOrder));
@@ -69,28 +69,32 @@ export async function GET() {
     { total: number; approved: number; pending: number }
   > = {};
 
-  // Only compute for deferrals that are currently shown as pending cards
-  for (const row of pendingRows) {
-    const defId = row.deferral.id;
-    const cycle = Number((row.deferral as any).approvalCycle ?? 0);
+  const pendingDeferralIds = Array.from(
+    new Set(pendingRows.map((row) => row.deferral.id)),
+  );
 
-    // Count only PARALLEL segment roles and only in CURRENT cycle
-    const seg = await db
-      .select({ status: deferralApprovals.status })
+  if (pendingDeferralIds.length > 0) {
+    const parallelRows = await db
+      .select({
+        deferralId: deferralApprovals.deferralId,
+        status: deferralApprovals.status,
+      })
       .from(deferralApprovals)
+      .innerJoin(deferrals, eq(deferrals.id, deferralApprovals.deferralId))
       .where(
         and(
-          eq(deferralApprovals.deferralId, defId),
-          eq(deferralApprovals.cycle, cycle),
-          inArray(deferralApprovals.stepRole, PARALLEL_ROLES as any),
+          inArray(deferralApprovals.deferralId, pendingDeferralIds),
+          eq(deferralApprovals.cycle, deferrals.approvalCycle),
+          inArray(deferralApprovals.stepRole, [...PARALLEL_ROLES]),
         ),
       );
 
-    if (seg.length > 0) {
-      const total = seg.length;
-      const approved = seg.filter((x: any) => x.status === "APPROVED").length;
-      const pending = seg.filter((x: any) => x.status === "PENDING").length;
-      parallelCounts[defId] = { total, approved, pending };
+    for (const row of parallelRows) {
+      const defId = String(row.deferralId);
+      parallelCounts[defId] ??= { total: 0, approved: 0, pending: 0 };
+      parallelCounts[defId].total++;
+      if (row.status === "APPROVED") parallelCounts[defId].approved++;
+      if (row.status === "PENDING") parallelCounts[defId].pending++;
     }
   }
 

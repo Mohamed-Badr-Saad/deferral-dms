@@ -206,9 +206,9 @@ export default function DeferralEditPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold truncate">
+          <h1 className="break-words text-2xl font-semibold">
             {item.deferralCode}
           </h1>
           <div className="mt-1 text-sm text-muted-foreground">
@@ -216,14 +216,17 @@ export default function DeferralEditPage() {
           </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
           <Button
             variant="secondary"
+            className="w-full sm:w-auto"
             onClick={() => router.push(`/deferrals/${item.id}`)}
           >
             Cancel
           </Button>
-          <Button onClick={done}>Done</Button>
+          <Button className="w-full sm:w-auto" onClick={done}>
+            Done
+          </Button>
         </div>
       </div>
 
@@ -233,12 +236,23 @@ export default function DeferralEditPage() {
         </CardHeader>
         <CardContent>
           <Tabs value={tab} onValueChange={onTabChange}>
-            <TabsList>
-              <TabsTrigger value="basic">Basic info</TabsTrigger>
-              <TabsTrigger value="text">Description</TabsTrigger>
-              <TabsTrigger value="mitigations">Mitigations</TabsTrigger>
-              {/* later: Dates / RAM / Attachments */}
-            </TabsList>
+            <div className="w-full overflow-x-auto pb-1">
+              <TabsList className="h-auto w-max min-w-full justify-start gap-1 p-1">
+                <TabsTrigger value="basic" className="h-9 flex-none px-4">
+                  Basic info
+                </TabsTrigger>
+                <TabsTrigger value="text" className="h-9 flex-none px-4">
+                  Description
+                </TabsTrigger>
+                <TabsTrigger
+                  value="mitigations"
+                  className="h-9 flex-none px-4"
+                >
+                  Mitigations
+                </TabsTrigger>
+                {/* later: Dates / RAM / Attachments */}
+              </TabsList>
+            </div>
 
             <TabsContent value="basic" className="mt-4 space-y-4">
               <div className="grid gap-4 md:grid-cols-2">

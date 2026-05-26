@@ -297,9 +297,11 @@ export default function DeferralDetailClient({ id }: { id: string }) {
       )}
 
       <Card className="rounded-2xl">
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <div>
-            <CardTitle className="text-xl">{deferral.deferralCode}</CardTitle>
+        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <CardTitle className="break-words text-xl">
+              {deferral.deferralCode}
+            </CardTitle>
             <div className="mt-1 text-sm text-muted-foreground">
               Status: {deferral.status}
               {deferral.workOrderLink?.deferralNumber
@@ -313,12 +315,13 @@ export default function DeferralDetailClient({ id }: { id: string }) {
             )}
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
             {isInitiator &&
               ["APPROVED", "COMPLETED"].includes(deferral.status) && (
                 <Button
                   type="button"
                   variant="outline"
+                  className="w-full sm:w-auto"
                   onClick={() => setShowCloseDialog(true)}
                 >
                   Close deferral
@@ -329,6 +332,7 @@ export default function DeferralDetailClient({ id }: { id: string }) {
               <Button
                 type="button"
                 variant="outline"
+                className="w-full sm:w-auto"
                 onClick={() => setShowSoftDeleteDialog(true)}
               >
                 Delete with reason
@@ -339,6 +343,7 @@ export default function DeferralDetailClient({ id }: { id: string }) {
               <Button
                 type="button"
                 variant="destructive"
+                className="w-full sm:w-auto"
                 onClick={() => setShowHardDeleteDialog(true)}
               >
                 Delete draft permanently
