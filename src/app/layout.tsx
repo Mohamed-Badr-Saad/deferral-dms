@@ -10,9 +10,18 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-background text-foreground antialiased">
+      <body className="min-h-screen overflow-x-hidden bg-background text-foreground antialiased">
         {children}
-        <Toaster richColors />
+        <Toaster
+          richColors
+          closeButton
+          position="top-center"
+          mobileOffset={{ top: 16, left: 12, right: 12 }}
+          toastOptions={{
+            className: "max-w-[calc(100vw-24px)] [overflow-wrap:anywhere]",
+            descriptionClassName: "[overflow-wrap:anywhere]",
+          }}
+        />
       </body>
     </html>
   );

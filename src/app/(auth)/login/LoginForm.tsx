@@ -17,6 +17,7 @@ export default function LoginForm() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
     try {
@@ -34,13 +35,14 @@ export default function LoginForm() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
+    setFormError("");
 
     try {
       const res = await fetch("/api/auth/sign-in/email", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          email,
+          email: email.trim(),
           password,
           rememberMe,
         }),
@@ -49,7 +51,11 @@ export default function LoginForm() {
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        toast.error(data?.message ?? "Invalid credentials");
+        const message = data?.message ?? "Invalid email or password";
+        setFormError(message);
+        toast.error(message, {
+          description: "Please check the email and password, then try again.",
+        });
         setLoading(false);
         return;
       }
@@ -57,14 +63,16 @@ export default function LoginForm() {
       toast.success("Logged in");
       window.location.href = "/dashboard";
     } catch {
-      toast.error("Server error");
+      const message = "Server error";
+      setFormError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <Card className="rounded-2xl shadow-sm">
+    <Card className="w-full max-w-full min-w-0 rounded-2xl shadow-sm">
       <CardHeader className="space-y-1">
         <CardTitle className="text-lg">Welcome back</CardTitle>
         <p className="text-sm text-muted-foreground">
@@ -74,6 +82,15 @@ export default function LoginForm() {
 
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-5">
+          {formError && (
+            <div
+              role="alert"
+              className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive [overflow-wrap:anywhere]"
+            >
+              {formError}
+            </div>
+          )}
+
           <div className="grid gap-3">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
