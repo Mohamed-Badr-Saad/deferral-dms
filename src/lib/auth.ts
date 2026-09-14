@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
+import { admin } from "better-auth/plugins";
 import { Pool } from "pg";
 
 function splitOrigins(value: string | undefined) {
@@ -78,5 +79,14 @@ export const auth = betterAuth({
     },
   },
 
-  plugins: [nextCookies()],
+  plugins: [
+    // ✅ Admin plugin: lets ADMIN users create/remove accounts server-side
+    // (auth.api.createUser / auth.api.removeUser) without hijacking the
+    // acting admin's own session. Its schema additions (role/banned/... on
+    // the auth user table) are picked up automatically by deploy/migrate.mjs
+    // via better-auth's getMigrations() on next deploy.
+    admin(),
+    // nextCookies() must stay last in the plugins array (better-auth requirement).
+    nextCookies(),
+  ],
 });

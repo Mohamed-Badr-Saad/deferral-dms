@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { db } from "@/src/db";
 import { deferrals, notifications, users } from "@/src/db/schema";
 import { and, between, eq, gt, ilike, inArray, lt } from "drizzle-orm";
+import { sendPushToUser } from "@/src/lib/push";
 
 const EXPIRY_NOTIFICATION_TITLE_PREFIX = "Deferral expiring soon:";
 const EXPIRY_ELIGIBLE_STATUSES = ["COMPLETED"] as const;
@@ -139,6 +140,17 @@ export async function runExpiryNotifications(options: ExpiryJobOptions) {
         equipmentTagSnapshot: def.equipmentTag ?? null,
         createdAt,
       })) as any,
+    );
+
+    // Best-effort browser push alongside the in-app notification rows above.
+    await Promise.all(
+      [...recipientIds].map((userId) =>
+        sendPushToUser(userId, {
+          title,
+          body,
+          url: `/deferrals/${def.id}`,
+        }),
+      ),
     );
 
     deferralsNotified++;

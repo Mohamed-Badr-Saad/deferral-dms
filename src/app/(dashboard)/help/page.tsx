@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { BackToTopButton } from "./BackToTopButton";
+import { GuideImage } from "./GuideImage";
 import {
   STATUS_COLORS,
   STATUS_LABELS,
@@ -91,6 +92,46 @@ const statusGuide: Array<{
     userAction:
       "Review whether a 2nd/3rd deferral is needed or whether the work has been completed and should be closed.",
   },
+];
+
+const featureList = [
+  "Structured deferral requests: work order, equipment, criticality, original/current/new LAFD (Last Acceptable Failure Date), description, justification, and consequence of not deferring.",
+  "RAM risk assessment: People, Asset, Environment, and Reputation severity/likelihood scoring with an auto-calculated risk cell and level.",
+  "Mitigations with their own department-level approval: each mitigation is routed to the head of the department responsible for it.",
+  "A multi-step approval workflow that automatically routes the deferral through department, reliability, optional Technical Authority / AD HOC, parallel management sign-off, and planning sign-off stages.",
+  "Digital signatures: every user uploads a personal signature once from their profile, and it is stamped on every approval, return, or rejection they perform.",
+  "1st / 2nd / 3rd deferral tracking for the same work order, with a duplicate-work-order warning when starting a new one.",
+  "Attachments on deferrals (PDF, PNG, JPG, WEBP up to 25 MB) kept with the record and included in the PDF export.",
+  "Printable PDF export containing the full deferral, risk data, mitigations, approval timeline, and signatures.",
+  "In-app notifications plus optional browser push notifications, so approvers are alerted even when the app tab isn't open.",
+  "Expiry tracking: the system warns the initiator and reliability roles before a new LAFD date arrives.",
+  "Dashboard with department, status, and deferral-rank breakdowns, scoped to what each role is allowed to see.",
+  "Search, filtering, and CSV export of deferrals matching the current filters.",
+  "Admin page for creating/removing user accounts, assigning roles and departments, and managing Responsible GM department mappings.",
+];
+
+const accountCreationSteps = [
+  "Open the app's sign-up page (the \"Create account\" link on the sign-in screen, or the address your administrator shared with you).",
+  "Enter your full name, work email address, and a password.",
+  "Choose your Department from the dropdown. This determines which Department Head reviews deferrals you create, and which deferrals you review if your role is Department Head.",
+  "Enter your Position (job title).",
+  "Press Create account. You'll be signed in automatically.",
+  "An administrator still needs to confirm your role (Applicant, Department Head, Reliability Engineer, etc.) from the Admin page — new accounts start with a basic role until assigned otherwise.",
+];
+
+const signInSteps = [
+  "Open the app's sign-in page.",
+  "Enter the email address and password used at sign-up.",
+  "Press Sign in. You'll land on the Dashboard.",
+  "The first time you sign in on a new browser, the app may ask permission to show notifications — choose Allow so you're alerted when a deferral needs your action, even if the tab isn't open.",
+];
+
+const signatureSteps = [
+  "Open Profile from the sidebar or the user menu in the header.",
+  "In the Signature section, press Upload & Trim and choose an image of your signature (a photo or scan works — plain background is best).",
+  "Use the editor to crop tightly around the signature, then adjust rotation, brightness, and contrast until it's clean and legible.",
+  "Press Save. Your signature is now stored and will automatically be stamped on every approval, return, or rejection you perform, and on any deferral PDF that includes your sign-off.",
+  "You can repeat these steps at any time to replace your signature with a new one.",
 ];
 
 const approvalSequence = [
@@ -231,6 +272,7 @@ const notificationGuide = [
   "Expiry notifications remind the initiator to create a 2nd/3rd deferral if the work remains deferred, or to close the deferral if the job has been completed.",
   "Notifications are available from the bell in the header. Users can open the related deferral and mark notifications as read.",
   "When the reason for a notification is fulfilled, related notification handling can mark it as read so users do not keep acting on old alerts.",
+  "When notifications are allowed in the browser, the app also sends a native browser notification for the same events, so approvers see an alert even if the app tab isn't open (as long as the browser itself is running).",
 ];
 
 function Section(props: {
@@ -287,6 +329,25 @@ function BulletList({ items }: { items: string[] }) {
   );
 }
 
+function StepList({ steps }: { steps: string[] }) {
+  return (
+    <Card className="rounded-lg py-5">
+      <CardContent className="px-5">
+        <ol className="space-y-3 text-sm text-muted-foreground">
+          {steps.map((step, index) => (
+            <li key={step} className="flex gap-3">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                {index + 1}
+              </span>
+              <span>{step}</span>
+            </li>
+          ))}
+        </ol>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function HelpPage() {
   return (
     <div id="top" className="space-y-8">
@@ -301,8 +362,10 @@ export default function HelpPage() {
             Deferral Management System Help
           </h1>
           <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
-            This page explains the app workflow, statuses, approvals,
-            notifications, filters, exports, buttons, and common user actions.
+            This page explains the app's features, how to get started, how to
+            use the app day to day, the approval cycle and each role's
+            responsibility, statuses, notifications, filters, exports, and
+            buttons.
           </p>
         </div>
       </div>
@@ -310,6 +373,10 @@ export default function HelpPage() {
       <Card className="rounded-lg py-5">
         <CardContent className="grid gap-3 px-5 text-sm sm:grid-cols-2 lg:grid-cols-3">
           {[
+            ["Features", "#features"],
+            ["Getting started", "#getting-started"],
+            ["Your signature", "#signature"],
+            ["Roles and access", "#roles"],
             ["Statuses", "#statuses"],
             ["Create a deferral", "#create-deferral"],
             ["Approval cycle", "#approvals"],
@@ -317,6 +384,7 @@ export default function HelpPage() {
             ["Reliability GM decision", "#gm-decision"],
             ["Notifications", "#notifications"],
             ["Buttons and actions", "#buttons"],
+            ["PDF and signatures", "#pdf"],
           ].map(([label, href]) => (
             <Link
               key={href}
@@ -328,6 +396,57 @@ export default function HelpPage() {
           ))}
         </CardContent>
       </Card>
+
+      <Section
+        id="features"
+        title="App Features"
+        description="What the Deferral Management System does, at a glance."
+      >
+        <Card className="rounded-lg py-5">
+          <CardContent className="px-5">
+            <BulletList items={featureList} />
+          </CardContent>
+        </Card>
+      </Section>
+
+      <Section
+        id="getting-started"
+        title="Getting Started"
+        description="How to create your account, sign in, and enable notifications."
+      >
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-foreground">
+              Create an account
+            </h3>
+            <StepList steps={accountCreationSteps} />
+            <GuideImage
+              src="/user-guide/create-account.png"
+              alt="Sign-up form showing name, email, password, and department fields"
+              caption="The sign-up form."
+            />
+          </div>
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-foreground">Sign in</h3>
+            <StepList steps={signInSteps} />
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        id="signature"
+        title="Add Your Signature"
+        description="Every user uploads a personal signature once. It is stamped automatically on approvals and PDFs from then on."
+      >
+        <div className="grid gap-6 lg:grid-cols-2">
+          <StepList steps={signatureSteps} />
+          <GuideImage
+            src="/user-guide/add-signature.png"
+            alt="Profile page signature upload and trim editor"
+            caption="Uploading and trimming a signature from Profile."
+          />
+        </div>
+      </Section>
 
       <Section
         id="roles"
@@ -431,20 +550,14 @@ export default function HelpPage() {
         title="Create A Deferral"
         description="The initiator creates the record, completes all required sections, and submits it into approval."
       >
-        <Card className="rounded-lg py-5">
-          <CardContent className="px-5">
-            <ol className="space-y-3 text-sm text-muted-foreground">
-              {creationSteps.map((step, index) => (
-                <li key={step} className="flex gap-3">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                    {index + 1}
-                  </span>
-                  <span>{step}</span>
-                </li>
-              ))}
-            </ol>
-          </CardContent>
-        </Card>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <StepList steps={creationSteps} />
+          <GuideImage
+            src="/user-guide/create-deferral.png"
+            alt="New deferral form with work order, equipment, LAFD dates, and risk fields"
+            caption="The new deferral form."
+          />
+        </div>
 
         <div className="grid gap-3 md:grid-cols-2">
           <HelpCard title="Duplicate work order warning">
@@ -468,22 +581,9 @@ export default function HelpPage() {
       <Section
         id="approvals"
         title="Approval Cycle"
-        description="The approval timeline is written in the business sequence used by the workflow."
+        description="The approval timeline is written in the business sequence used by the workflow. Each step below is a role, in order."
       >
-        <Card className="rounded-lg py-5">
-          <CardContent className="px-5">
-            <ol className="space-y-3 text-sm text-muted-foreground">
-              {approvalSequence.map((step, index) => (
-                <li key={step} className="flex gap-3">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                    {index + 1}
-                  </span>
-                  <span>{step}</span>
-                </li>
-              ))}
-            </ol>
-          </CardContent>
-        </Card>
+        <StepList steps={approvalSequence} />
 
         <div className="grid gap-3 md:grid-cols-3">
           <HelpCard title="Approve">
@@ -503,23 +603,17 @@ export default function HelpPage() {
 
       <Section
         id="reviewer-actions"
-        title="How Reviewers Review A Deferral"
+        title="How Reviewers Approve, Return, Or Reject A Deferral"
         description="A reviewer is any approval user who has an active approval step, such as Department Head, Reliability Engineer, Reliability GM, Technical Authority, AD HOC, Responsible GM, SOD, DFGM, or Planning."
       >
-        <Card className="rounded-lg py-5">
-          <CardContent className="px-5">
-            <ol className="space-y-3 text-sm text-muted-foreground">
-              {reviewerSteps.map((step, index) => (
-                <li key={step} className="flex gap-3">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                    {index + 1}
-                  </span>
-                  <span>{step}</span>
-                </li>
-              ))}
-            </ol>
-          </CardContent>
-        </Card>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <StepList steps={reviewerSteps} />
+          <GuideImage
+            src="/user-guide/approve-return-reject.png"
+            alt="Approval panel with comment box and Approve, Return to Initiator, and Reject Completely buttons"
+            caption="The approval action panel."
+          />
+        </div>
 
         <div className="grid gap-3 md:grid-cols-3">
           <HelpCard title="Before approving">
@@ -544,20 +638,7 @@ export default function HelpPage() {
         title="Reliability GM: Add Technical Authority Or AD HOC"
         description="Reliability GM can add optional Technical Authority and AD HOC approval steps before signing the Reliability GM approval."
       >
-        <Card className="rounded-lg py-5">
-          <CardContent className="px-5">
-            <ol className="space-y-3 text-sm text-muted-foreground">
-              {reliabilityGmDecisionSteps.map((step, index) => (
-                <li key={step} className="flex gap-3">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                    {index + 1}
-                  </span>
-                  <span>{step}</span>
-                </li>
-              ))}
-            </ol>
-          </CardContent>
-        </Card>
+        <StepList steps={reliabilityGmDecisionSteps} />
 
         <div className="grid gap-3 md:grid-cols-2">
           <HelpCard title="Requires Technical Authority">
@@ -567,13 +648,13 @@ export default function HelpPage() {
           </HelpCard>
           <HelpCard title="Requires AD HOC">
             Turn this on when the deferral needs an AD HOC review. The workflow
-            inserts an AD HOC Signature step after Reliability GM and before the
-            parallel sign-off group.
+            inserts an AD HOC Signature step after Reliability GM and before
+            the parallel sign-off group.
           </HelpCard>
           <HelpCard title="When it is editable">
             The decision is editable only when the Reliability GM approval is
-            active and pending. If the panel shows Locked, the GM step is either
-            not active yet or has already been signed.
+            active and pending. If the panel shows Locked, the GM step is
+            either not active yet or has already been signed.
           </HelpCard>
           <HelpCard title="Correct order">
             Reliability GM should set TA/AD HOC requirements, press Save
@@ -652,8 +733,8 @@ export default function HelpPage() {
             rotation, brightness, contrast, reset, and live preview.
           </HelpCard>
           <HelpCard title="Approval signatures">
-            When a user approves, returns, or rejects, the app stores the user's
-            name and signature snapshot with that action.
+            When a user approves, returns, or rejects, the app stores the
+            user's name and signature snapshot with that action.
           </HelpCard>
           <HelpCard title="Mitigation approval table">
             Mitigation approvals have their own PDF table. The table includes

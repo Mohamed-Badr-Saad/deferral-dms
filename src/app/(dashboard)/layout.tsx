@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/src/lib/auth";
 import { Sidebar } from "@/src/components/Sidebar";
 import { Header } from "@/src/components/Header";
+import { PushNotificationsPrompt } from "@/src/components/PushNotificationsPrompt";
 
 export default async function AppLayout({
   children,
@@ -17,6 +18,8 @@ export default async function AppLayout({
 
   return (
     <div className="min-h-screen bg-background">
+      <PushNotificationsPrompt />
+
       {/* subtle brand background */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-gradient-to-b from-accent/40 via-background to-background" />

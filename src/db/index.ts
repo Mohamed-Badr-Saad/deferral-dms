@@ -2,8 +2,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
 if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not set");
-if (process.env.DATABASE_URL.includes("5432"))
-  console.warn("WARNING: DATABASE_URL is using 5432. Your Docker is on 5433.");
+// Previously warned on port 5432; this is the correct internal Docker DB port.
 
 
 declare global {

@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/src/lib/api";
 import { toast } from "sonner";
+import { ShieldCheck, UserPlus, Users as UsersIcon, Network, Trash2 } from "lucide-react";
 import {
+  DEPARTMENTS,
   USER_ROLES,
   USER_ROLE_LABELS,
   type UserRole,
@@ -13,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -35,6 +38,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { GM_GROUPS, GmGroup } from "@/src/lib/gm-group";
 
@@ -45,7 +59,7 @@ type UserRow = {
   department: string;
   position: string;
   role: UserRole;
-  gmGroup: GmGroup;
+  gmGroup: GmGroup | null;
   signatureUrl?: string | null;
   signatureUploadedAt?: string | null;
 };
@@ -69,6 +83,18 @@ const GM_GROUP_LABELS: Record<GmMapping["gmGroup"], string> = {
   PRODUCTION_GM: "Production GM",
 };
 
+const NO_GM_GROUP = "__none__";
+
+const emptyNewUser = {
+  name: "",
+  email: "",
+  password: "",
+  department: "",
+  position: "",
+  role: "ENGINEER_APPLICANT" as UserRole,
+  gmGroup: NO_GM_GROUP as string,
+};
+
 export default function AdminPage() {
   const [tab, setTab] = useState<"users" | "mappings">("users");
 
@@ -77,7 +103,14 @@ export default function AdminPage() {
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersItems, setUsersItems] = useState<UserRow[]>([]);
 
-  
+  // Add user dialog
+  const [addUserOpen, setAddUserOpen] = useState(false);
+  const [addUserBusy, setAddUserBusy] = useState(false);
+  const [newUser, setNewUser] = useState(emptyNewUser);
+
+  // Delete user
+  const [deleteUserBusy, setDeleteUserBusy] = useState<string | null>(null);
+
   // Mappings
   const [mq, setMq] = useState("");
   const [mLoading, setMLoading] = useState(true);
@@ -147,6 +180,11 @@ export default function AdminPage() {
     return mItems.filter((m) => m.department.toLowerCase().includes(needle));
   }, [mItems, mq]);
 
+  const adminCount = useMemo(
+    () => usersItems.filter((u) => u.role === "ADMIN").length,
+    [usersItems],
+  );
+
   async function changeUserRole(userId: string, role: UserRole) {
     try {
       await api(`/api/admin/users/${userId}`, {
@@ -157,6 +195,79 @@ export default function AdminPage() {
       await loadUsers();
     } catch (e: any) {
       toast("Error", { description: e.message ?? "Failed to update role" });
+    }
+  }
+
+  async function changeGMGroup(userId: string, gmGroup: GmGroup) {
+    try {
+      await api(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        json: { gmGroup },
+      });
+      toast("Saved", { description: "GM group updated." });
+      await loadUsers();
+    } catch (e: any) {
+      toast("Error", { description: e.message ?? "Failed to update GM group" });
+    }
+  }
+
+  async function createUser() {
+    if (
+      !newUser.name.trim() ||
+      !newUser.email.trim() ||
+      !newUser.password ||
+      !newUser.department ||
+      !newUser.position.trim()
+    ) {
+      toast("Validation error", {
+        description: "Name, email, password, department and position are required.",
+      });
+      return;
+    }
+    if (newUser.password.length < 8) {
+      toast("Validation error", {
+        description: "Password must be at least 8 characters.",
+      });
+      return;
+    }
+
+    setAddUserBusy(true);
+    try {
+      await api(`/api/admin/users`, {
+        method: "POST",
+        json: {
+          name: newUser.name.trim(),
+          email: newUser.email.trim(),
+          password: newUser.password,
+          department: newUser.department,
+          position: newUser.position.trim(),
+          role: newUser.role,
+          gmGroup: newUser.gmGroup === NO_GM_GROUP ? null : newUser.gmGroup,
+        },
+      });
+      toast("Account created", {
+        description: `${newUser.name.trim()} can now sign in.`,
+      });
+      setAddUserOpen(false);
+      setNewUser(emptyNewUser);
+      await loadUsers();
+    } catch (e: any) {
+      toast("Error", { description: e.message ?? "Failed to create account" });
+    } finally {
+      setAddUserBusy(false);
+    }
+  }
+
+  async function deleteUser(userId: string) {
+    setDeleteUserBusy(userId);
+    try {
+      await api(`/api/admin/users/${userId}`, { method: "DELETE" });
+      toast("Account removed", { description: "The account was deleted." });
+      await loadUsers();
+    } catch (e: any) {
+      toast("Error", { description: e.message ?? "Failed to remove account" });
+    } finally {
+      setDeleteUserBusy(null);
     }
   }
 
@@ -200,7 +311,6 @@ export default function AdminPage() {
   }
 
   async function deleteMapping(id: string) {
-    if (!confirm("Delete this mapping?")) return;
     try {
       await api(`/api/admin/responsible-gm/${id}`, { method: "DELETE" });
       toast("Deleted", { description: "Mapping removed." });
@@ -210,25 +320,34 @@ export default function AdminPage() {
     }
   }
 
-  async function changeGMGroup(userId: string, gmGroup: GmGroup) {
-    try {
-      await api(`/api/admin/users/${userId}`, {
-        method: "PATCH",
-        json: { gmGroup },
-      });
-      toast("Saved", { description: "GM group updated." });
-      await loadUsers();
-    } catch (e: any) {
-      toast("Error", { description: e.message ?? "Failed to update GM group" });
-    }
-  }
-
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Admin</h1>
-        <div className="text-sm text-muted-foreground">
-          Manage user roles and Responsible GM mappings.
+      <div className="flex flex-col gap-4 rounded-xl border bg-gradient-to-br from-primary/5 via-background to-background p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 flex-none items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <ShieldCheck className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold">Admin</h1>
+            <div className="text-sm text-muted-foreground">
+              Manage user accounts, roles, and Responsible GM mappings.
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="secondary" className="gap-1.5 px-3 py-1.5 text-sm">
+            <UsersIcon className="h-3.5 w-3.5" />
+            {usersItems.length} users
+          </Badge>
+          <Badge variant="secondary" className="gap-1.5 px-3 py-1.5 text-sm">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            {adminCount} admin{adminCount === 1 ? "" : "s"}
+          </Badge>
+          <Badge variant="secondary" className="gap-1.5 px-3 py-1.5 text-sm">
+            <Network className="h-3.5 w-3.5" />
+            {mItems.length} mappings
+          </Badge>
         </div>
       </div>
 
@@ -263,6 +382,151 @@ export default function AdminPage() {
                 >
                   Refresh
                 </Button>
+
+                <Dialog open={addUserOpen} onOpenChange={setAddUserOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="w-full gap-1.5 md:w-auto">
+                      <UserPlus className="h-4 w-4" />
+                      Add Account
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add Account</DialogTitle>
+                    </DialogHeader>
+
+                    <div className="space-y-4">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>Full name</Label>
+                          <Input
+                            value={newUser.name}
+                            onChange={(e) =>
+                              setNewUser((s) => ({ ...s, name: e.target.value }))
+                            }
+                            placeholder="Full name"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Email</Label>
+                          <Input
+                            type="email"
+                            value={newUser.email}
+                            onChange={(e) =>
+                              setNewUser((s) => ({ ...s, email: e.target.value }))
+                            }
+                            placeholder="name@company.com"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Temporary password</Label>
+                        <Input
+                          type="text"
+                          value={newUser.password}
+                          onChange={(e) =>
+                            setNewUser((s) => ({ ...s, password: e.target.value }))
+                          }
+                          placeholder="At least 8 characters"
+                        />
+                      </div>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>Department</Label>
+                          <Select
+                            value={newUser.department}
+                            onValueChange={(v) =>
+                              setNewUser((s) => ({ ...s, department: v }))
+                            }
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select department..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {DEPARTMENTS.map((d) => (
+                                <SelectItem key={d} value={d}>
+                                  {d}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Position</Label>
+                          <Input
+                            value={newUser.position}
+                            onChange={(e) =>
+                              setNewUser((s) => ({ ...s, position: e.target.value }))
+                            }
+                            placeholder="Engineer"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>Role</Label>
+                          <Select
+                            value={newUser.role}
+                            onValueChange={(v) =>
+                              setNewUser((s) => ({ ...s, role: v as UserRole }))
+                            }
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {USER_ROLES.map((r) => (
+                                <SelectItem key={r} value={r}>
+                                  {USER_ROLE_LABELS[r]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>GM group (optional)</Label>
+                          <Select
+                            value={newUser.gmGroup}
+                            onValueChange={(v) =>
+                              setNewUser((s) => ({ ...s, gmGroup: v }))
+                            }
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={NO_GM_GROUP}>None</SelectItem>
+                              {GM_GROUPS.map((g) => (
+                                <SelectItem key={g} value={g}>
+                                  {g}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setAddUserOpen(false);
+                            setNewUser(emptyNewUser);
+                          }}
+                          disabled={addUserBusy}
+                        >
+                          Cancel
+                        </Button>
+                        <Button onClick={createUser} disabled={addUserBusy}>
+                          {addUserBusy ? "Creating..." : "Create account"}
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
             </CardHeader>
             <CardContent>
@@ -274,7 +538,7 @@ export default function AdminPage() {
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-lg border">
-                  <Table className="min-w-[920px]">
+                  <Table className="min-w-[1020px]">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Email</TableHead>
@@ -283,7 +547,8 @@ export default function AdminPage() {
                         <TableHead>Position</TableHead>
                         <TableHead>Signature</TableHead>
                         <TableHead>GM Group</TableHead>
-                        <TableHead className="w-[260px]">Role</TableHead>
+                        <TableHead className="w-[240px]">Role</TableHead>
+                        <TableHead className="w-[80px]" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -298,10 +563,10 @@ export default function AdminPage() {
                           <TableCell className="text-xs text-muted-foreground">
                             {u.signatureUrl ? "Uploaded" : "Missing"}
                           </TableCell>
-                          
+
                           <TableCell>
                             <Select
-                              value={u.gmGroup}
+                              value={u.gmGroup ?? NO_GM_GROUP}
                               onValueChange={(v) =>
                                 changeGMGroup(u.id, v as GmGroup)
                               }
@@ -337,6 +602,46 @@ export default function AdminPage() {
                                 ))}
                               </SelectContent>
                             </Select>
+                          </TableCell>
+
+                          <TableCell>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                  disabled={deleteUserBusy === u.id}
+                                  aria-label={`Remove ${u.email}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    Remove {u.name}&apos;s account?
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This permanently deletes the login for{" "}
+                                    <span className="font-medium">{u.email}</span>{" "}
+                                    and their business profile. Deferrals or
+                                    approvals they are linked to will keep the
+                                    historical record but the account itself
+                                    cannot sign in again. This cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-destructive text-white hover:bg-destructive/90"
+                                    onClick={() => deleteUser(u.id)}
+                                  >
+                                    Remove account
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -382,11 +687,18 @@ export default function AdminPage() {
                     <div className="space-y-4">
                       <div className="space-y-2">
                         <Label>Department</Label>
-                        <Input
-                          value={newDept}
-                          onChange={(e) => setNewDept(e.target.value)}
-                          placeholder="e.g. Electrical"
-                        />
+                        <Select value={newDept} onValueChange={setNewDept}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select department..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {DEPARTMENTS.map((d) => (
+                              <SelectItem key={d} value={d}>
+                                {d}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
 
                       <div className="space-y-2">
@@ -395,7 +707,7 @@ export default function AdminPage() {
                           value={newGroup}
                           onValueChange={(v) => setNewGroup(v as any)}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className="w-full">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -447,24 +759,33 @@ export default function AdminPage() {
                       {filteredMappings.map((m) => (
                         <TableRow key={m.id}>
                           <TableCell>
-                            <Input
+                            <Select
                               value={m.department}
-                              onChange={(e) => {
-                                const next = e.target.value;
+                              onValueChange={(v) => {
                                 setMItems((prev) =>
                                   prev.map((x) =>
-                                    x.id === m.id
-                                      ? { ...x, department: next }
-                                      : x,
+                                    x.id === m.id ? { ...x, department: v } : x,
                                   ),
                                 );
+                                updateMapping(m.id, { department: v });
                               }}
-                              onBlur={() =>
-                                updateMapping(m.id, {
-                                  department: m.department,
-                                })
-                              }
-                            />
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {DEPARTMENTS.map((d) => (
+                                  <SelectItem key={d} value={d}>
+                                    {d}
+                                  </SelectItem>
+                                ))}
+                                {!DEPARTMENTS.includes(m.department as any) && (
+                                  <SelectItem value={m.department}>
+                                    {m.department} (legacy)
+                                  </SelectItem>
+                                )}
+                              </SelectContent>
+                            </Select>
                           </TableCell>
                           <TableCell>
                             <Select
@@ -493,12 +814,32 @@ export default function AdminPage() {
                             </Select>
                           </TableCell>
                           <TableCell className="flex gap-2">
-                            <Button
-                              variant="destructive"
-                              onClick={() => deleteMapping(m.id)}
-                            >
-                              Delete
-                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="destructive">Delete</Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    Delete this mapping?
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    {m.department} will no longer route to{" "}
+                                    {GM_GROUP_LABELS[m.gmGroup]}. This cannot be
+                                    undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-destructive text-white hover:bg-destructive/90"
+                                    onClick={() => deleteMapping(m.id)}
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </TableCell>
                         </TableRow>
                       ))}

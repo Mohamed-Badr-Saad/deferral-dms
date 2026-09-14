@@ -32,7 +32,8 @@ async function fetchAsDataUri(
   try {
     if (!url) return null;
 
-    const origin = new URL(req.url).origin;
+    // Docker uses its internal gateway to fetch newly uploaded signature files.
+    const origin = process.env.INTERNAL_APP_URL ?? new URL(req.url).origin;
     const absolute = url.startsWith("http") ? url : `${origin}${url}`;
 
     const cookie = req.headers.get("cookie") ?? "";

@@ -8,6 +8,7 @@ import {
 } from "@/src/db/schema";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { sendPushToUser } from "@/src/lib/push";
 
 const PLANNING_STEP_ROLES = new Set([
   "PLANNING_ENGINEER",
@@ -341,5 +342,13 @@ export async function notifyUser(
     isRead: false,
     deferralCodeSnapshot: snapshot?.code ?? null,
     equipmentTagSnapshot: snapshot?.equipmentTag ?? null,
+  });
+
+  // Best-effort browser push alongside the in-app notification row above.
+  // Never blocks/fails the caller — see sendPushToUser().
+  await sendPushToUser(userId, {
+    title,
+    body,
+    url: deferralId ? `/deferrals/${deferralId}` : "/dashboard",
   });
 }

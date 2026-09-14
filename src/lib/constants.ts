@@ -27,6 +27,9 @@ export const DEPARTMENTS = [
   "Painting",
   "Subsea Control",
   "Production",
+  "Reliability",
+  "Planning",
+  "Management",
 ] as const;
 
 export type Department = (typeof DEPARTMENTS)[number];

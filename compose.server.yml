@@ -1,0 +1,91 @@
+name: deferral-dms-server
+
+x-app-environment: &app-environment
+  DATABASE_URL: postgresql://dms:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.docker}@db:5432/deferral_dms
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET}
+  BETTER_AUTH_BASE_URL: ${APP_URL:?Set APP_URL}
+  BETTER_AUTH_TRUSTED_ORIGINS: ${APP_URL:?Set APP_URL}
+  CRON_SECRET: ${CRON_SECRET:?Set CRON_SECRET}
+  FILE_STORAGE_DRIVER: local
+  INTERNAL_APP_URL: http://web:8080
+  MAX_FILE_SIZE: ${MAX_FILE_SIZE:-5242880}
+  # Optional: browser push notifications are skipped (no error) if unset.
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+  VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.com}
+
+services:
+  db:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: deferral_dms
+      POSTGRES_USER: dms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    build:
+      context: .
+      target: migrate
+    environment: *app-environment
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    init: true
+    environment: *app-environment
+    volumes:
+      - uploads:/app/public/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  web:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:8080"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - uploads:/srv/uploads:ro
+    depends_on:
+      app:
+        condition: service_healthy
+
+  scheduler:
+    image: node:22-bookworm-slim
+    restart: unless-stopped
+    init: true
+    user: node
+    environment:
+      CRON_SECRET: ${CRON_SECRET:?Set CRON_SECRET}
+      JOB_BASE_URL: http://app:3000
+    volumes:
+      - ./deploy/scheduler.mjs:/scheduler.mjs:ro
+    command: [node, /scheduler.mjs]
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  database:
+  uploads:

@@ -9,3 +9,4 @@ export * from "./notifications";
 export * from "./responsible-gm-mappings";
 export * from "./deferral-risks";
 export * from "./deferral-mitigations"; // ✅ mod #10 — new table for structured mitigations
+export * from "./push-subscriptions";
