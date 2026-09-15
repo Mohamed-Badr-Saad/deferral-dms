@@ -1,40 +1,52 @@
 # User guide screenshots
 
-The Help page (`/help` in the app) looks for screenshots in this folder and
-shows a "not added yet" placeholder until each file exists. Drop PNG or JPG
-files in here with the exact names below and they'll appear automatically —
-no code change needed, just refresh the Help page.
+The in-app Help page (`/help`) shows these screenshots directly from this
+folder. Most of them have already been captured and added — this file is
+mainly a reference for the two that are still outstanding, and for anyone
+re-capturing a screenshot later.
+
+## Still outstanding (shown as placeholders on the Help page)
 
 | File to add | Where it's used | What to capture |
 |---|---|---|
-| `create-account.png` | Getting Started → Create an account | The sign-up form, filled in with example data (name, email, password, department, position) before pressing "Create account". |
-| `add-signature.png` | Add Your Signature | The Profile page's signature upload/trim editor, ideally mid-crop so the editing controls are visible. |
-| `create-deferral.png` | Create A Deferral | The new-deferral form — the top section (work order, equipment, LAFD dates) is the most useful part to show. |
-| `approve-return-reject.png` | Reviewer Actions | An open deferral's Approvals tab, showing the action panel with the comment box and the Approve / Return to Initiator / Reject Completely buttons. |
+| `main-screen-overview.png` | Main Screens | The deferrals list / main screen, showing the sidebar, search, filters, and notifications bell. |
+| `dashboard-statistics.png` | Dashboard & Statistics | The Dashboard screen showing department/status breakdown. |
 
-## How to capture one
+## Already captured and in use
 
-1. Sign in to the app with a test account (not a real production account) —
-   in a normal browser window sized around 1280×800 for a clean, consistent
-   look across screenshots.
-2. Navigate to the screen listed above and get it into the state described.
-3. Take a screenshot (Windows: `Win+Shift+S`, then paste into Paint or any
-   image editor and save as PNG).
-4. Crop out anything sensitive — your OS taskbar, other open tabs, or any
-   real data you don't want in a document that may be shared with other
-   staff.
-5. Save the file into this folder (`public/user-guide/`) using the exact
-   file name from the table above, overwriting the old one if you're
-   replacing it.
-6. Rebuild/redeploy, or just refresh the page if you're running the dev
-   server — Next.js serves anything in `public/` directly.
+These are referenced by the Help page exactly as named (spaces and all —
+the page URL-encodes them automatically, so there's no need to rename
+anything):
 
-## Notes
+- `signup.png`
+- `enable notifications 1.png`, `enable notifications 2.png`
+- `press on upload and trim to upload the signature.png`, `adjust the electronnic signature.png`
+- `new deferral 1.png` through `new deferral 9.png`, `new deferral 10 (Submit).png`, `confirm submit .png`
+- `delete with reason.png`
+- `dh notified.png`, `open the deferral to check its details .png`, `approvals tab .png`, `approval page.png`, `approve , return to initiator , reject completely.png`
+- `DH mitigation approvals .png`
+- `reliability GM decision for TA and AD HOC.png`
+- `deferral history .png`
+- `export tab (print).png`
 
-- Don't use real employee names, emails, or work-order data in these
-  screenshots if the guide will be shared outside the small group that
-  already has app access — create a throwaway test deferral/account for the
-  capture instead.
-- You can add more screenshots later (a second one per section, a numbered
-  sequence, etc.) by adding another `<GuideImage src="/user-guide/..." .../>`
-  in `src/app/(dashboard)/help/page.tsx` next to the existing ones.
+(`approve , return to initiator , reject.png` is an unused duplicate of
+`approve , return to initiator , reject completely.png` — safe to delete.)
+
+## Updating a screenshot
+
+1. Recapture the screen in the app (1280×800 or similar makes a
+   consistent-looking set).
+2. Save it into this folder using **the exact same file name** as the one
+   it's replacing — the Help page just refreshes, no code change needed.
+3. Avoid using real employee names, emails, or work-order data in
+   screenshots if the guide is shared outside the small group that already
+   has app access.
+
+## Adding a brand-new screenshot
+
+Open `src/app/(dashboard)/help/page.tsx` and either add a filename to an
+existing `...Slides` array (for a carousel that already has slides — e.g.
+`createDeferralSlides`) or create a new array and render it with
+`<GuideCarousel slides={...} />` in the relevant section. A single-image
+section can use `<GuideImage src="/user-guide/<name>.png" alt="..." />`
+instead of a carousel.

@@ -1,4 +1,19 @@
 import Link from "next/link";
+import {
+  BookOpen,
+  KeyRound,
+  LayoutDashboard,
+  ListChecks,
+  Bell,
+  PenTool,
+  FileCheck2,
+  Users,
+  Workflow,
+  Search,
+  BarChart3,
+  MousePointerClick,
+  Sparkles,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -10,12 +25,61 @@ import {
 import { cn } from "@/lib/utils";
 import { BackToTopButton } from "./BackToTopButton";
 import { GuideImage } from "./GuideImage";
+import { HelpSidebar, type HelpNavGroup } from "./HelpSidebar";
 import {
   STATUS_COLORS,
   STATUS_LABELS,
   USER_ROLE_LABELS,
   type DeferralStatus,
 } from "@/src/lib/constants";
+
+// ---------------------------------------------------------------------------
+// Content data
+// ---------------------------------------------------------------------------
+
+const navGroups: HelpNavGroup[] = [
+  {
+    label: "Overview",
+    items: [
+      { id: "introduction", label: "Introduction" },
+      { id: "features", label: "App features" },
+    ],
+  },
+  {
+    label: "Getting started",
+    items: [
+      { id: "getting-started", label: "Create account & sign in" },
+      { id: "signature", label: "Add your signature" },
+      { id: "roles", label: "Roles & access" },
+    ],
+  },
+  {
+    label: "Using the app",
+    items: [
+      { id: "screens", label: "Main screens" },
+      { id: "create-deferral", label: "Create a deferral" },
+      { id: "search", label: "Search, filters & export" },
+    ],
+  },
+  {
+    label: "Approvals",
+    items: [
+      { id: "approvals", label: "Approval cycle & roles" },
+      { id: "reviewer-actions", label: "Approve / return / reject" },
+      { id: "gm-decision", label: "Reliability GM decision" },
+      { id: "statuses", label: "Deferral statuses" },
+    ],
+  },
+  {
+    label: "Reference",
+    items: [
+      { id: "dashboard", label: "Dashboard & statistics" },
+      { id: "notifications", label: "Notifications" },
+      { id: "pdf", label: "PDF, signatures & profile" },
+      { id: "buttons", label: "Buttons & actions" },
+    ],
+  },
+];
 
 const statusGuide: Array<{
   status: DeferralStatus;
@@ -95,11 +159,11 @@ const statusGuide: Array<{
 ];
 
 const featureList = [
-  "Structured deferral requests: work order, equipment, criticality, original/current/new LAFD (Last Acceptable Failure Date), description, justification, and consequence of not deferring.",
+  "Structured deferral requests: work order, equipment, criticality, original/current/new LAFD, description, justification, and consequence of not deferring.",
   "RAM risk assessment: People, Asset, Environment, and Reputation severity/likelihood scoring with an auto-calculated risk cell and level.",
-  "Mitigations with their own department-level approval: each mitigation is routed to the head of the department responsible for it.",
-  "A multi-step approval workflow that automatically routes the deferral through department, reliability, optional Technical Authority / AD HOC, parallel management sign-off, and planning sign-off stages.",
-  "Digital signatures: every user uploads a personal signature once from their profile, and it is stamped on every approval, return, or rejection they perform.",
+  "Mitigations with their own department-level approval, automatically routed to the head of the responsible department.",
+  "A multi-step approval workflow that automatically routes the deferral through department, reliability, optional Technical Authority / AD HOC, parallel management sign-off, and planning stages.",
+  "Digital signatures: every user uploads a personal signature once, and it is stamped on every approval, return, or rejection they perform.",
   "1st / 2nd / 3rd deferral tracking for the same work order, with a duplicate-work-order warning when starting a new one.",
   "Attachments on deferrals (PDF, PNG, JPG, WEBP up to 25 MB) kept with the record and included in the PDF export.",
   "Printable PDF export containing the full deferral, risk data, mitigations, approval timeline, and signatures.",
@@ -111,7 +175,7 @@ const featureList = [
 ];
 
 const accountCreationSteps = [
-  "Open the app's sign-up page (the \"Create account\" link on the sign-in screen, or the address your administrator shared with you).",
+  "Open the app's sign-up page (the “Create account” link on the sign-in screen, or the address your administrator shared with you).",
   "Enter your full name, work email address, and a password.",
   "Choose your Department from the dropdown. This determines which Department Head reviews deferrals you create, and which deferrals you review if your role is Department Head.",
   "Enter your Position (job title).",
@@ -135,14 +199,40 @@ const signatureSteps = [
 ];
 
 const approvalSequence = [
-  "Department Head of the initiator department.",
-  "Department Heads for all mitigation departments.",
-  "Reliability Engineer.",
-  "Reliability GM.",
-  "Technical Authority or AD HOC, when required by the deferral.",
-  "Parallel Sign-off Group: Responsible GM, SOD, and DFGM steps based on the selected decision path.",
-  "Planning Engineer (GMS Integration).",
-  "Planning Supervisor Engineer.",
+  {
+    role: "Department Head",
+    detail: "Of the initiator's department — the first review of every deferral.",
+  },
+  {
+    role: "Mitigation Department Heads",
+    detail: "One per mitigation department selected on the deferral, reviewed in parallel.",
+  },
+  {
+    role: "Reliability Engineer",
+    detail: "Reviews after department and mitigation approvals are complete.",
+  },
+  {
+    role: "Reliability GM",
+    detail:
+      "Reviews next, and decides whether Technical Authority and/or AD HOC review is required.",
+  },
+  {
+    role: "Technical Authority / AD HOC",
+    detail: "Only inserted into the cycle when the Reliability GM enables them.",
+  },
+  {
+    role: "Parallel Sign-off Group",
+    detail:
+      "Responsible GM (always), plus SOD and DFGM in parallel for a 2nd/3rd deferral.",
+  },
+  {
+    role: "Planning Engineer",
+    detail: "GMS Integration sign-off.",
+  },
+  {
+    role: "Planning Supervisor Engineer",
+    detail: "Final signature — after this, the deferral becomes Completed.",
+  },
 ];
 
 const reviewerSteps = [
@@ -180,89 +270,21 @@ const creationSteps = [
 ];
 
 const buttonGuide = [
-  {
-    name: "Apply",
-    where: "Deferrals search",
-    meaning: "Runs the search using the selected filters.",
-  },
-  {
-    name: "Reset",
-    where: "Deferrals search",
-    meaning: "Clears filters and returns the search to its default state.",
-  },
-  {
-    name: "Refresh results",
-    where: "Deferrals search",
-    meaning: "Reloads the current results without changing filters.",
-  },
-  {
-    name: "Export CSV",
-    where: "Deferrals search",
-    meaning: "Exports the deferrals that match the current filters.",
-  },
-  {
-    name: "Save",
-    where: "Draft/edit forms",
-    meaning: "Saves changed draft or returned deferral fields.",
-  },
-  {
-    name: "Submit",
-    where: "Deferral details",
-    meaning: "Moves a draft or returned deferral into the approval workflow.",
-  },
-  {
-    name: "Approve",
-    where: "Approval panel",
-    meaning: "Signs the active approval step and moves the workflow forward.",
-  },
-  {
-    name: "Return to Initiator",
-    where: "Approval panel",
-    meaning:
-      "Sends the deferral back for modification. A reason/comment is required.",
-  },
-  {
-    name: "Reject Completely",
-    where: "Approval panel",
-    meaning:
-      "Rejects the deferral permanently. The initiator cannot resubmit the same record.",
-  },
-  {
-    name: "Save Decision",
-    where: "Reliability GM Decision",
-    meaning:
-      "Saves whether Technical Authority and/or AD HOC signatures should be added to the approval cycle.",
-  },
-  {
-    name: "Close deferral",
-    where: "Deferral details/print tab",
-    meaning:
-      "Allows the initiator to close a completed deferral when the job has been executed before the new LAFD.",
-  },
-  {
-    name: "Mark as deleted",
-    where: "Deferral details",
-    meaning:
-      "Soft-deletes an in-approval deferral and stores the deletion reason.",
-  },
-  {
-    name: "Delete draft",
-    where: "Deferral details",
-    meaning:
-      "Permanently removes the initiator's draft from the database before it enters approval.",
-  },
-  {
-    name: "Export PDF",
-    where: "Print tab",
-    meaning:
-      "Downloads the printable deferral PDF, including signatures, risks, approvals, and mitigation approvals.",
-  },
-  {
-    name: "Upload & Trim",
-    where: "Profile",
-    meaning:
-      "Uploads a signature image and opens the editor for crop, rotation, brightness, and contrast.",
-  },
+  { name: "Apply", where: "Deferrals search", meaning: "Runs the search using the selected filters." },
+  { name: "Reset", where: "Deferrals search", meaning: "Clears filters and returns the search to its default state." },
+  { name: "Refresh results", where: "Deferrals search", meaning: "Reloads the current results without changing filters." },
+  { name: "Export CSV", where: "Deferrals search", meaning: "Exports the deferrals that match the current filters." },
+  { name: "Save", where: "Draft/edit forms", meaning: "Saves changed draft or returned deferral fields." },
+  { name: "Submit", where: "Deferral details", meaning: "Moves a draft or returned deferral into the approval workflow." },
+  { name: "Approve", where: "Approval panel", meaning: "Signs the active approval step and moves the workflow forward." },
+  { name: "Return to Initiator", where: "Approval panel", meaning: "Sends the deferral back for modification. A reason/comment is required." },
+  { name: "Reject Completely", where: "Approval panel", meaning: "Rejects the deferral permanently. The initiator cannot resubmit the same record." },
+  { name: "Save Decision", where: "Reliability GM Decision", meaning: "Saves whether Technical Authority and/or AD HOC signatures should be added to the approval cycle." },
+  { name: "Close deferral", where: "Deferral details/print tab", meaning: "Allows the initiator to close a completed deferral when the job has been executed before the new LAFD." },
+  { name: "Mark as deleted", where: "Deferral details", meaning: "Soft-deletes an in-approval deferral and stores the deletion reason." },
+  { name: "Delete draft", where: "Deferral details", meaning: "Permanently removes the initiator's draft from the database before it enters approval." },
+  { name: "Export PDF", where: "Print tab", meaning: "Downloads the printable deferral PDF, including signatures, risks, approvals, and mitigation approvals." },
+  { name: "Upload & Trim", where: "Profile", meaning: "Uploads a signature image and opens the editor for crop, rotation, brightness, and contrast." },
 ];
 
 const notificationGuide = [
@@ -271,25 +293,58 @@ const notificationGuide = [
   "Reliability Engineer, Reliability GM, and the initiator receive expiry notifications before the new LAFD by the configured 15 day window.",
   "Expiry notifications remind the initiator to create a 2nd/3rd deferral if the work remains deferred, or to close the deferral if the job has been completed.",
   "Notifications are available from the bell in the header. Users can open the related deferral and mark notifications as read.",
-  "When the reason for a notification is fulfilled, related notification handling can mark it as read so users do not keep acting on old alerts.",
   "When notifications are allowed in the browser, the app also sends a native browser notification for the same events, so approvers see an alert even if the app tab isn't open (as long as the browser itself is running).",
 ];
 
+// ---------------------------------------------------------------------------
+// Small building blocks
+// ---------------------------------------------------------------------------
+
+function SectionHeading({
+  eyebrow,
+  title,
+  description,
+}: {
+  eyebrow?: string;
+  title: string;
+  description?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      {eyebrow && (
+        <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+          {eyebrow}
+        </p>
+      )}
+      <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">{title}</h2>
+      {description && (
+        <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>
+      )}
+    </div>
+  );
+}
+
 function Section(props: {
   id: string;
+  icon?: React.ReactNode;
+  eyebrow?: string;
   title: string;
   description?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section id={props.id} className="scroll-mt-24 space-y-4">
-      <div>
-        <h2 className="text-xl font-semibold tracking-tight">{props.title}</h2>
-        {props.description && (
-          <p className="mt-1 text-sm text-muted-foreground">
-            {props.description}
-          </p>
+    <section id={props.id} className="scroll-mt-24 space-y-5">
+      <div className="flex items-start gap-3">
+        {props.icon && (
+          <div className="mt-0.5 flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-primary/10 text-primary">
+            {props.icon}
+          </div>
         )}
+        <SectionHeading
+          eyebrow={props.eyebrow}
+          title={props.title}
+          description={props.description}
+        />
       </div>
       {props.children}
     </section>
@@ -305,9 +360,7 @@ function HelpCard(props: {
     <Card className="gap-4 rounded-lg py-5">
       <CardHeader className="px-5">
         <CardTitle className="text-base">{props.title}</CardTitle>
-        {props.description && (
-          <CardDescription>{props.description}</CardDescription>
-        )}
+        {props.description && <CardDescription>{props.description}</CardDescription>}
       </CardHeader>
       <CardContent className="px-5 text-sm text-muted-foreground">
         {props.children}
@@ -322,7 +375,7 @@ function BulletList({ items }: { items: string[] }) {
       {items.map((item) => (
         <li key={item} className="flex gap-2">
           <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-          <span>{item}</span>
+          <span className="text-sm text-muted-foreground">{item}</span>
         </li>
       ))}
     </ul>
@@ -348,405 +401,512 @@ function StepList({ steps }: { steps: string[] }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
 export default function HelpPage() {
   return (
-    <div id="top" className="space-y-8">
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary" id="top">
+    <div id="top" className="mx-auto max-w-7xl">
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/10 via-background to-background px-6 py-10 sm:px-10">
+        <div className="relative space-y-4">
+          <Badge variant="secondary" className="gap-1.5">
+            <Sparkles className="h-3.5 w-3.5" />
             User guide
           </Badge>
-        </div>
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Deferral Management System Help
+          <h1 className="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">
+            Deferral Management System
           </h1>
-          <p className="max-w-3xl text-sm text-muted-foreground sm:text-base">
-            This page explains the app's features, how to get started, how to
-            use the app day to day, the approval cycle and each role's
-            responsibility, statuses, notifications, filters, exports, and
-            buttons.
+          <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
+            Everything you need to know: what the app does, how to get set up,
+            how to create and review deferrals, and how the approval cycle
+            works &mdash; with a full breakdown of every role's responsibility.
           </p>
         </div>
       </div>
 
-      <Card className="rounded-lg py-5">
-        <CardContent className="grid gap-3 px-5 text-sm sm:grid-cols-2 lg:grid-cols-3">
-          {[
-            ["Features", "#features"],
-            ["Getting started", "#getting-started"],
-            ["Your signature", "#signature"],
-            ["Roles and access", "#roles"],
-            ["Statuses", "#statuses"],
-            ["Create a deferral", "#create-deferral"],
-            ["Approval cycle", "#approvals"],
-            ["Reviewer actions", "#reviewer-actions"],
-            ["Reliability GM decision", "#gm-decision"],
-            ["Notifications", "#notifications"],
-            ["Buttons and actions", "#buttons"],
-            ["PDF and signatures", "#pdf"],
-          ].map(([label, href]) => (
+      {/* Mobile quick nav */}
+      <div className="mt-6 flex gap-2 overflow-x-auto pb-1 lg:hidden">
+        {navGroups
+          .flatMap((g) => g.items)
+          .map((item) => (
             <Link
-              key={href}
-              href={href}
-              className="rounded-lg border px-3 py-2 text-foreground transition-colors hover:bg-muted"
+              key={item.id}
+              href={`#${item.id}`}
+              className="shrink-0 rounded-full border bg-background px-3.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
             >
-              {label}
+              {item.label}
             </Link>
           ))}
-        </CardContent>
-      </Card>
+      </div>
 
-      <Section
-        id="features"
-        title="App Features"
-        description="What the Deferral Management System does, at a glance."
-      >
-        <Card className="rounded-lg py-5">
-          <CardContent className="px-5">
-            <BulletList items={featureList} />
-          </CardContent>
-        </Card>
-      </Section>
+      <div className="mt-8 grid gap-10 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <HelpSidebar groups={navGroups} />
 
-      <Section
-        id="getting-started"
-        title="Getting Started"
-        description="How to create your account, sign in, and enable notifications."
-      >
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">
-              Create an account
-            </h3>
-            <StepList steps={accountCreationSteps} />
+        <div className="min-w-0 space-y-14">
+          <Section
+            id="introduction"
+            icon={<BookOpen className="h-4.5 w-4.5" />}
+            eyebrow="Chapter 1"
+            title="Introduction"
+            description="What the Deferral Management System is for, and how it fits into the LAFD deferral process."
+          >
+            <Card className="rounded-lg py-5">
+              <CardContent className="space-y-3 px-5 text-sm text-muted-foreground">
+                <p>
+                  The Deferral Management System (DMS) is a company-wide tool
+                  designed to make the process of requesting, reviewing, and
+                  approving Last Acceptable Failure Date (LAFD) deferrals
+                  simple, transparent, and auditable. Engineers submit a
+                  deferral request with its supporting risk assessment and
+                  mitigations, then track it as it moves through a
+                  structured, multi-step approval cycle.
+                </p>
+                <p>
+                  Once submitted, a deferral is stored centrally and
+                  automatically routed to the correct approvers based on
+                  department and decisions made along the way &mdash; for
+                  example, whether Technical Authority or AD HOC review is
+                  required. Every approval, return, and rejection is stamped
+                  with the approver&apos;s digital signature and kept in the
+                  deferral&apos;s history, and the completed record can be
+                  exported as a PDF for audit and reporting.
+                </p>
+                <p>
+                  The app also sends notifications &mdash; inside the app,
+                  and as native browser notifications once enabled &mdash; so
+                  approvers know immediately when a deferral needs their
+                  action, and initiators are reminded before a new LAFD date
+                  arrives.
+                </p>
+              </CardContent>
+            </Card>
+          </Section>
+
+          <Section
+            id="features"
+            icon={<ListChecks className="h-4.5 w-4.5" />}
+            eyebrow="Chapter 1"
+            title="App Features"
+            description="What the Deferral Management System does, at a glance."
+          >
+            <Card className="rounded-lg py-5">
+              <CardContent className="px-5">
+                <BulletList items={featureList} />
+              </CardContent>
+            </Card>
+          </Section>
+
+          <Section
+            id="getting-started"
+            icon={<KeyRound className="h-4.5 w-4.5" />}
+            eyebrow="Chapter 2"
+            title="Create An Account & Sign In"
+            description="How to get into the app for the first time, and every time after."
+          >
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Create an account
+                </h3>
+                <StepList steps={accountCreationSteps} />
+                <GuideImage
+                  src="/user-guide/create-account.png"
+                  alt="Sign-up form showing name, email, password, and department fields"
+                  caption="The sign-up form."
+                />
+              </div>
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-foreground">Sign in</h3>
+                <StepList steps={signInSteps} />
+              </div>
+            </div>
+          </Section>
+
+          <Section
+            id="signature"
+            icon={<PenTool className="h-4.5 w-4.5" />}
+            eyebrow="Chapter 2"
+            title="Add Your Signature"
+            description="Every user uploads a personal signature once. It is stamped automatically on approvals and PDFs from then on."
+          >
+            <div className="grid gap-6 lg:grid-cols-2">
+              <StepList steps={signatureSteps} />
+              <GuideImage
+                src="/user-guide/add-signature.png"
+                alt="Profile page signature upload and trim editor"
+                caption="Uploading and trimming a signature from Profile."
+              />
+            </div>
+          </Section>
+
+          <Section
+            id="roles"
+            icon={<Users className="h-4.5 w-4.5" />}
+            eyebrow="Chapter 2"
+            title="Roles And Access"
+            description="The app shows actions based on the signed-in user's role and department."
+          >
+            <div className="grid gap-3 md:grid-cols-2">
+              {Object.entries(USER_ROLE_LABELS).map(([role, label]) => (
+                <HelpCard key={role} title={label}>
+                  {role === "ENGINEER_APPLICANT" &&
+                    "Creates deferrals, edits drafts/returned records, uploads attachments, submits deferrals, closes completed deferrals, deletes drafts, and can mark in-approval deferrals as deleted with a reason."}
+                  {role === "DEPARTMENT_HEAD" &&
+                    "Reviews deferrals for the user's department. Department Heads also approve mitigation steps when their department is selected as a required mitigation department."}
+                  {role === "RELIABILITY_ENGINEER" &&
+                    "Reviews deferrals after department and mitigation approvals. Also receives expiry notifications."}
+                  {role === "RELIABILITY_GM" &&
+                    "Reviews deferrals after Reliability Engineer, decides whether Technical Authority and/or AD HOC signatures are required, and receives expiry notifications."}
+                  {role === "RESPONSIBLE_GM" &&
+                    "Signs the responsible GM step inside the parallel sign-off group."}
+                  {role === "SOD" &&
+                    "Signs the SOD step when it is part of the selected approval path."}
+                  {role === "DFGM" &&
+                    "Signs the DFGM step when it is part of the selected approval path."}
+                  {role === "TECHNICAL_AUTHORITY" &&
+                    "Signs the Technical Authority step when the deferral requires TA review."}
+                  {role === "AD_HOC" &&
+                    "Signs the AD HOC step when the deferral requires AD HOC review."}
+                  {role === "PLANNING_ENGINEER" &&
+                    "Signs the Planning Engineer (GMS Integration) step after the main approvals are complete."}
+                  {role === "PLANNING_SUPERVISOR_ENGINEER" &&
+                    "Signs the final Planning Supervisor step. After this signature, the deferral becomes Completed."}
+                  {role === "ADMIN" &&
+                    "Manages users, roles, responsible GM mappings, and can access administrative setup pages."}
+                </HelpCard>
+              ))}
+            </div>
+          </Section>
+
+          <Section
+            id="screens"
+            icon={<LayoutDashboard className="h-4.5 w-4.5" />}
+            eyebrow="Chapter 3"
+            title="Main Screens"
+            description="A quick tour of the main screen before diving into each feature."
+          >
             <GuideImage
-              src="/user-guide/create-account.png"
-              alt="Sign-up form showing name, email, password, and department fields"
-              caption="The sign-up form."
+              src="/user-guide/main-screen-overview.png"
+              alt="Annotated main screen showing deferrals list, search, filters, and notifications"
+              caption="The main deferrals screen, with its key controls labeled."
+              aspect="16 / 8"
             />
-          </div>
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">Sign in</h3>
-            <StepList steps={signInSteps} />
-          </div>
-        </div>
-      </Section>
+            <div className="grid gap-3 md:grid-cols-2">
+              <HelpCard title="Department breakdown">
+                Department tabs show how many deferrals are in each status.
+                The app normalizes department names so capitalization
+                differences do not create duplicate departments.
+              </HelpCard>
+              <HelpCard title="Role visibility">
+                Initiators and Department Heads see dashboard counts for
+                their own department. Higher management roles can see all
+                departments.
+              </HelpCard>
+              <HelpCard title="First, second, and third deferrals">
+                Counters show whether a deferral is the first, second, or
+                third deferral created for the same work order.
+              </HelpCard>
+              <HelpCard title="Active and history records">
+                Active records include Draft, In Approval, Returned, and
+                Approved. History records include Completed, Closed,
+                Rejected, Deleted, and Expired.
+              </HelpCard>
+            </div>
+          </Section>
 
-      <Section
-        id="signature"
-        title="Add Your Signature"
-        description="Every user uploads a personal signature once. It is stamped automatically on approvals and PDFs from then on."
-      >
-        <div className="grid gap-6 lg:grid-cols-2">
-          <StepList steps={signatureSteps} />
-          <GuideImage
-            src="/user-guide/add-signature.png"
-            alt="Profile page signature upload and trim editor"
-            caption="Uploading and trimming a signature from Profile."
-          />
-        </div>
-      </Section>
+          <Section
+            id="create-deferral"
+            icon={<Workflow className="h-4.5 w-4.5" />}
+            eyebrow="Chapter 3"
+            title="Create A Deferral"
+            description="The initiator creates the record, completes all required sections, and submits it into approval."
+          >
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <StepList steps={creationSteps} />
+              <GuideImage
+                src="/user-guide/create-deferral.png"
+                alt="New deferral form with work order, equipment, LAFD dates, and risk fields"
+                caption="The new deferral form."
+              />
+            </div>
 
-      <Section
-        id="roles"
-        title="Roles And Access"
-        description="The app shows actions based on the signed-in user's role and department."
-      >
-        <div className="grid gap-3 md:grid-cols-2">
-          {Object.entries(USER_ROLE_LABELS).map(([role, label]) => (
-            <HelpCard key={role} title={label}>
-              {role === "ENGINEER_APPLICANT" &&
-                "Creates deferrals, edits drafts/returned records, uploads attachments, submits deferrals, closes completed deferrals, deletes drafts, and can mark in-approval deferrals as deleted with a reason."}
-              {role === "DEPARTMENT_HEAD" &&
-                "Reviews deferrals for the user's department. Department Heads also approve mitigation steps when their department is selected as a required mitigation department."}
-              {role === "RELIABILITY_ENGINEER" &&
-                "Reviews deferrals after department and mitigation approvals. Also receives expiry notifications."}
-              {role === "RELIABILITY_GM" &&
-                "Reviews deferrals after Reliability Engineer, decides whether Technical Authority and/or AD HOC signatures are required, and receives expiry notifications."}
-              {role === "RESPONSIBLE_GM" &&
-                "Signs the responsible GM step inside the parallel sign-off group."}
-              {role === "SOD" &&
-                "Signs the SOD step when it is part of the selected approval path."}
-              {role === "DFGM" &&
-                "Signs the DFGM step when it is part of the selected approval path."}
-              {role === "TECHNICAL_AUTHORITY" &&
-                "Signs the Technical Authority step when the deferral requires TA review."}
-              {role === "AD_HOC" &&
-                "Signs the AD HOC step when the deferral requires AD HOC review."}
-              {role === "PLANNING_ENGINEER" &&
-                "Signs the Planning Engineer (GMS Integration) step after the main approvals are complete."}
-              {role === "PLANNING_SUPERVISOR_ENGINEER" &&
-                "Signs the final Planning Supervisor step. After this signature, the deferral becomes Completed."}
-              {role === "ADMIN" &&
-                "Manages users, roles, responsible GM mappings, and can access administrative setup pages."}
-            </HelpCard>
-          ))}
-        </div>
-      </Section>
+            <div className="grid gap-3 md:grid-cols-2">
+              <HelpCard title="Duplicate work order warning">
+                If a work order already has a deferral, the app displays a
+                warning before continuing so the initiator confirms this is
+                an intended second or third deferral, not a duplicate.
+              </HelpCard>
+              <HelpCard title="Automatic draft saves">
+                Draft and returned deferral changes are saved when moving
+                between tabs, pressing Save, or opening details. This avoids
+                losing mitigation and risk changes while editing.
+              </HelpCard>
+              <HelpCard title="Mitigations">
+                The initiator can add multiple mitigations before
+                submission. Each mitigation has a required department. The
+                Department Head for that department is added to the
+                approval workflow.
+              </HelpCard>
+            </div>
+          </Section>
 
-      <Section
-        id="statuses"
-        title="Deferral Statuses"
-        description="Every deferral has one lifecycle status. Use filters and dashboards to review these states."
-      >
-        <div className="grid gap-3">
-          {statusGuide.map((item) => (
-            <Card key={item.status} className="rounded-lg py-4">
-              <CardContent className="grid gap-3 px-5 md:grid-cols-[180px_minmax(0,1fr)]">
-                <div>
-                  <Badge
-                    className={cn(
-                      "border-transparent",
-                      STATUS_COLORS[item.status],
-                    )}
-                  >
-                    {STATUS_LABELS[item.status]}
-                  </Badge>
-                </div>
-                <div className="space-y-2 text-sm">
-                  <p className="text-foreground">{item.meaning}</p>
-                  <p className="text-muted-foreground">{item.userAction}</p>
-                </div>
+          <Section
+            id="search"
+            icon={<Search className="h-4.5 w-4.5" />}
+            eyebrow="Chapter 3"
+            title="Search, Filters, And Export"
+            description="The Deferrals page is used to find records and export filtered data."
+          >
+            <div className="grid gap-3 md:grid-cols-2">
+              <HelpCard title="Available filters">
+                Filter by department, status, deferral code, work order
+                number, equipment tag, updated date range, and whether the
+                record is the 1st, 2nd, or 3rd deferral for its work order.
+              </HelpCard>
+              <HelpCard title="Role-based filtering">
+                Initiators are limited to their own department when
+                searching.
+              </HelpCard>
+              <HelpCard title="Results">
+                Results are ordered by Updated At, newest first. The page
+                loads the first group of records, then more records as the
+                user scrolls.
+              </HelpCard>
+              <HelpCard title="CSV export">
+                Export CSV downloads the deferrals matching the current
+                filters, so users should apply filters before exporting.
+              </HelpCard>
+            </div>
+          </Section>
+
+          <Section
+            id="approvals"
+            icon={<FileCheck2 className="h-4.5 w-4.5" />}
+            eyebrow="Chapter 4"
+            title="Approval Cycle & Roles"
+            description="Every deferral moves through these roles in order. Each step below is a role, in sequence."
+          >
+            <Card className="overflow-hidden rounded-lg py-0">
+              <div className="divide-y">
+                {approvalSequence.map((item, index) => (
+                  <div key={item.role} className="flex gap-4 px-5 py-4">
+                    <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                      {index + 1}
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        {item.role}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {item.detail}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <HelpCard title="Approve">
+                The active approver signs the current step. The signature
+                snapshot is stored with the approval so PDFs keep the signed
+                evidence.
+              </HelpCard>
+              <HelpCard title="Return to initiator">
+                Sends the deferral back for correction. A reason is
+                required. The initiator can edit and resubmit.
+              </HelpCard>
+              <HelpCard title="Reject completely">
+                Ends the workflow as Rejected. A reason is required, and the
+                initiator cannot resubmit that same record.
+              </HelpCard>
+            </div>
+          </Section>
+
+          <Section
+            id="reviewer-actions"
+            icon={<MousePointerClick className="h-4.5 w-4.5" />}
+            eyebrow="Chapter 4"
+            title="How Reviewers Approve, Return, Or Reject A Deferral"
+            description="A reviewer is any approval user who has an active approval step, such as Department Head, Reliability Engineer, Reliability GM, Technical Authority, AD HOC, Responsible GM, SOD, DFGM, or Planning."
+          >
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <StepList steps={reviewerSteps} />
+              <GuideImage
+                src="/user-guide/approve-return-reject.png"
+                alt="Approval panel with comment box and Approve, Return to Initiator, and Reject Completely buttons"
+                caption="The approval action panel."
+              />
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <HelpCard title="Before approving">
+                Confirm that the work order, equipment, original/current/new
+                LAFD, risk assessment, justification, consequence,
+                mitigations, and attachments support the deferral request.
+              </HelpCard>
+              <HelpCard title="Returning">
+                Use Return to Initiator when information is missing,
+                incorrect, or needs clarification. The return reason is
+                saved and shown to the initiator.
+              </HelpCard>
+              <HelpCard title="Rejecting">
+                Use Reject Completely only when the deferral should not
+                continue. This is final for the current record and requires
+                a reason.
+              </HelpCard>
+            </div>
+          </Section>
+
+          <Section
+            id="gm-decision"
+            icon={<Workflow className="h-4.5 w-4.5" />}
+            eyebrow="Chapter 4"
+            title="Reliability GM: Add Technical Authority Or AD HOC"
+            description="Reliability GM can add optional Technical Authority and AD HOC approval steps before signing the Reliability GM approval."
+          >
+            <StepList steps={reliabilityGmDecisionSteps} />
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <HelpCard title="Requires Technical Authority">
+                Turn this on when the deferral needs a Technical Authority
+                review. The workflow inserts a Technical Authority
+                Signature step after Reliability GM and before the parallel
+                sign-off group.
+              </HelpCard>
+              <HelpCard title="Requires AD HOC">
+                Turn this on when the deferral needs an AD HOC review. The
+                workflow inserts an AD HOC Signature step after Reliability
+                GM and before the parallel sign-off group.
+              </HelpCard>
+              <HelpCard title="When it is editable">
+                The decision is editable only when the Reliability GM
+                approval is active and pending. If the panel shows Locked,
+                the GM step is either not active yet or has already been
+                signed.
+              </HelpCard>
+              <HelpCard title="Correct order">
+                Reliability GM should set TA/AD HOC requirements, press
+                Save Decision, confirm the approval timeline, then approve
+                the Reliability GM step.
+              </HelpCard>
+            </div>
+          </Section>
+
+          <Section
+            id="statuses"
+            icon={<ListChecks className="h-4.5 w-4.5" />}
+            eyebrow="Chapter 4"
+            title="Deferral Statuses"
+            description="Every deferral has one lifecycle status. Use filters and dashboards to review these states."
+          >
+            <div className="grid gap-3">
+              {statusGuide.map((item) => (
+                <Card key={item.status} className="rounded-lg py-4">
+                  <CardContent className="grid gap-3 px-5 md:grid-cols-[180px_minmax(0,1fr)]">
+                    <div>
+                      <Badge
+                        className={cn("border-transparent", STATUS_COLORS[item.status])}
+                      >
+                        {STATUS_LABELS[item.status]}
+                      </Badge>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <p className="text-foreground">{item.meaning}</p>
+                      <p className="text-muted-foreground">{item.userAction}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Dashboard status cards exclude Submitted because it is a
+              transitional workflow state in the current process.
+            </p>
+          </Section>
+
+          <Section
+            id="dashboard"
+            icon={<BarChart3 className="h-4.5 w-4.5" />}
+            eyebrow="Chapter 5"
+            title="Dashboard & Statistics"
+            description="A visual overview of deferrals across the company, by department, status, and deferral rank."
+          >
+            <GuideImage
+              src="/user-guide/dashboard-statistics.png"
+              alt="Dashboard showing department and status breakdowns"
+              caption="The dashboard's department and status breakdown."
+              aspect="16 / 8"
+            />
+          </Section>
+
+          <Section
+            id="notifications"
+            icon={<Bell className="h-4.5 w-4.5" />}
+            eyebrow="Chapter 5"
+            title="Notifications"
+            description="Notifications tell users when a deferral needs attention."
+          >
+            <Card className="rounded-lg py-5">
+              <CardContent className="px-5">
+                <BulletList items={notificationGuide} />
               </CardContent>
             </Card>
-          ))}
+          </Section>
+
+          <Section
+            id="pdf"
+            icon={<FileCheck2 className="h-4.5 w-4.5" />}
+            eyebrow="Chapter 5"
+            title="PDF, Signatures, And Profile"
+            description="The app stores signatures and includes them in approval evidence."
+          >
+            <div className="grid gap-3 md:grid-cols-2">
+              <HelpCard title="Profile signature">
+                Users upload their signature from Profile. The editor
+                supports crop, rotation, brightness, contrast, reset, and
+                live preview.
+              </HelpCard>
+              <HelpCard title="Approval signatures">
+                When a user approves, returns, or rejects, the app stores
+                the user's name and signature snapshot with that action.
+              </HelpCard>
+              <HelpCard title="Mitigation approval table">
+                Mitigation approvals have their own PDF table. The table
+                includes department, mitigation, signature, approved by,
+                date, and comment.
+              </HelpCard>
+              <HelpCard title="PDF export">
+                The Print tab exports the PDF containing deferral
+                information, risks, mitigations, approval timeline,
+                signatures, and mitigation approvals.
+              </HelpCard>
+            </div>
+          </Section>
+
+          <Section
+            id="buttons"
+            icon={<MousePointerClick className="h-4.5 w-4.5" />}
+            eyebrow="Chapter 5"
+            title="Buttons And Actions"
+            description="Common buttons and what they do."
+          >
+            <div className="grid gap-3">
+              {buttonGuide.map((button) => (
+                <Card key={`${button.where}-${button.name}`} className="rounded-lg py-4">
+                  <CardContent className="grid gap-3 px-5 text-sm md:grid-cols-[180px_220px_minmax(0,1fr)]">
+                    <div className="font-medium text-foreground">{button.name}</div>
+                    <div className="text-muted-foreground">{button.where}</div>
+                    <div className="text-muted-foreground">{button.meaning}</div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </Section>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Dashboard status cards exclude Submitted because it is a transitional
-          workflow state in the current process.
-        </p>
-      </Section>
-
-      <Section
-        id="dashboard"
-        title="Dashboard"
-        description="The dashboard summarizes deferrals by department, status, and deferral rank."
-      >
-        <div className="grid gap-3 md:grid-cols-2">
-          <HelpCard title="Department breakdown">
-            Department tabs show how many deferrals are in each status. The app
-            normalizes department names so capitalization differences do not
-            create duplicate departments.
-          </HelpCard>
-          <HelpCard title="Role visibility">
-            Initiators and Department Heads see dashboard counts for their own
-            department. Higher management roles can see all departments.
-          </HelpCard>
-          <HelpCard title="First, second, and third deferrals">
-            Counters show whether a deferral is the first, second, or third
-            deferral created for the same work order.
-          </HelpCard>
-          <HelpCard title="Active and history records">
-            Active records include Draft, In Approval, Returned, and Approved.
-            History records include Completed, Closed, Rejected, Deleted, and
-            Expired.
-          </HelpCard>
-        </div>
-      </Section>
-
-      <Section
-        id="create-deferral"
-        title="Create A Deferral"
-        description="The initiator creates the record, completes all required sections, and submits it into approval."
-      >
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-          <StepList steps={creationSteps} />
-          <GuideImage
-            src="/user-guide/create-deferral.png"
-            alt="New deferral form with work order, equipment, LAFD dates, and risk fields"
-            caption="The new deferral form."
-          />
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <HelpCard title="Duplicate work order warning">
-            If a work order already has a deferral, the app displays a warning
-            before continuing so the initiator confirms this is an intended
-            second or third deferral, not a duplicate.
-          </HelpCard>
-          <HelpCard title="Automatic draft saves">
-            Draft and returned deferral changes are saved when moving between
-            tabs, pressing Save, or opening details. This avoids losing
-            mitigation and risk changes while editing.
-          </HelpCard>
-          <HelpCard title="Mitigations">
-            The initiator can add multiple mitigations before submission. Each
-            mitigation has a required department. The Department Head for that
-            department is added to the approval workflow.
-          </HelpCard>
-        </div>
-      </Section>
-
-      <Section
-        id="approvals"
-        title="Approval Cycle"
-        description="The approval timeline is written in the business sequence used by the workflow. Each step below is a role, in order."
-      >
-        <StepList steps={approvalSequence} />
-
-        <div className="grid gap-3 md:grid-cols-3">
-          <HelpCard title="Approve">
-            The active approver signs the current step. The signature snapshot
-            is stored with the approval so PDFs keep the signed evidence.
-          </HelpCard>
-          <HelpCard title="Return to initiator">
-            Sends the deferral back for correction. A reason is required. The
-            initiator can edit and resubmit.
-          </HelpCard>
-          <HelpCard title="Reject completely">
-            Ends the workflow as Rejected. A reason is required, and the
-            initiator cannot resubmit that same record.
-          </HelpCard>
-        </div>
-      </Section>
-
-      <Section
-        id="reviewer-actions"
-        title="How Reviewers Approve, Return, Or Reject A Deferral"
-        description="A reviewer is any approval user who has an active approval step, such as Department Head, Reliability Engineer, Reliability GM, Technical Authority, AD HOC, Responsible GM, SOD, DFGM, or Planning."
-      >
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-          <StepList steps={reviewerSteps} />
-          <GuideImage
-            src="/user-guide/approve-return-reject.png"
-            alt="Approval panel with comment box and Approve, Return to Initiator, and Reject Completely buttons"
-            caption="The approval action panel."
-          />
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-3">
-          <HelpCard title="Before approving">
-            Confirm that the work order, equipment, original/current/new LAFD,
-            risk assessment, justification, consequence, mitigations, and
-            attachments support the deferral request.
-          </HelpCard>
-          <HelpCard title="Returning">
-            Use Return to Initiator when information is missing, incorrect, or
-            needs clarification. The return reason is saved and shown to the
-            initiator.
-          </HelpCard>
-          <HelpCard title="Rejecting">
-            Use Reject Completely only when the deferral should not continue.
-            This is final for the current record and requires a reason.
-          </HelpCard>
-        </div>
-      </Section>
-
-      <Section
-        id="gm-decision"
-        title="Reliability GM: Add Technical Authority Or AD HOC"
-        description="Reliability GM can add optional Technical Authority and AD HOC approval steps before signing the Reliability GM approval."
-      >
-        <StepList steps={reliabilityGmDecisionSteps} />
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <HelpCard title="Requires Technical Authority">
-            Turn this on when the deferral needs a Technical Authority review.
-            The workflow inserts a Technical Authority Signature step after
-            Reliability GM and before the parallel sign-off group.
-          </HelpCard>
-          <HelpCard title="Requires AD HOC">
-            Turn this on when the deferral needs an AD HOC review. The workflow
-            inserts an AD HOC Signature step after Reliability GM and before
-            the parallel sign-off group.
-          </HelpCard>
-          <HelpCard title="When it is editable">
-            The decision is editable only when the Reliability GM approval is
-            active and pending. If the panel shows Locked, the GM step is
-            either not active yet or has already been signed.
-          </HelpCard>
-          <HelpCard title="Correct order">
-            Reliability GM should set TA/AD HOC requirements, press Save
-            Decision, confirm the approval timeline, then approve the
-            Reliability GM step.
-          </HelpCard>
-        </div>
-      </Section>
-
-      <Section
-        id="search"
-        title="Search, Filters, And Export"
-        description="The Deferrals page is used to find records and export filtered data."
-      >
-        <div className="grid gap-3 md:grid-cols-2">
-          <HelpCard title="Available filters">
-            Filter by department, status, deferral code, work order number,
-            equipment tag, updated date range, and whether the record is the
-            1st, 2nd, or 3rd deferral for its work order.
-          </HelpCard>
-          <HelpCard title="Role-based filtering">
-            Initiators are limited to their own department when searching.
-          </HelpCard>
-          <HelpCard title="Results">
-            Results are ordered by Updated At, newest first. The page loads the
-            first group of records, then more records as the user scrolls.
-          </HelpCard>
-          <HelpCard title="CSV export">
-            Export CSV downloads the deferrals matching the current filters, so
-            users should apply filters before exporting.
-          </HelpCard>
-        </div>
-      </Section>
-
-      <Section
-        id="notifications"
-        title="Notifications"
-        description="Notifications tell users when a deferral needs attention."
-      >
-        <Card className="rounded-lg py-5">
-          <CardContent className="px-5">
-            <BulletList items={notificationGuide} />
-          </CardContent>
-        </Card>
-      </Section>
-
-      <Section
-        id="buttons"
-        title="Buttons And Actions"
-        description="Common buttons and what they do."
-      >
-        <div className="grid gap-3">
-          {buttonGuide.map((button) => (
-            <Card
-              key={`${button.where}-${button.name}`}
-              className="rounded-lg py-4"
-            >
-              <CardContent className="grid gap-3 px-5 text-sm md:grid-cols-[180px_220px_minmax(0,1fr)]">
-                <div className="font-medium text-foreground">{button.name}</div>
-                <div className="text-muted-foreground">{button.where}</div>
-                <div className="text-muted-foreground">{button.meaning}</div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </Section>
-
-      <Section
-        id="pdf"
-        title="PDF, Signatures, And Profile"
-        description="The app stores signatures and includes them in approval evidence."
-      >
-        <div className="grid gap-3 md:grid-cols-2">
-          <HelpCard title="Profile signature">
-            Users upload their signature from Profile. The editor supports crop,
-            rotation, brightness, contrast, reset, and live preview.
-          </HelpCard>
-          <HelpCard title="Approval signatures">
-            When a user approves, returns, or rejects, the app stores the
-            user's name and signature snapshot with that action.
-          </HelpCard>
-          <HelpCard title="Mitigation approval table">
-            Mitigation approvals have their own PDF table. The table includes
-            department, mitigation, signature, approved by, date, and comment.
-          </HelpCard>
-          <HelpCard title="PDF export">
-            The Print tab exports the PDF containing deferral information,
-            risks, mitigations, approval timeline, signatures, and mitigation
-            approvals.
-          </HelpCard>
-        </div>
-      </Section>
+      </div>
 
       <BackToTopButton />
     </div>
