@@ -25,6 +25,7 @@ import {
 import { cn } from "@/lib/utils";
 import { BackToTopButton } from "./BackToTopButton";
 import { GuideImage } from "./GuideImage";
+import { GuideCarousel, type GuideSlide } from "./GuideCarousel";
 import { HelpSidebar, type HelpNavGroup } from "./HelpSidebar";
 import {
   STATUS_COLORS,
@@ -201,11 +202,13 @@ const signatureSteps = [
 const approvalSequence = [
   {
     role: "Department Head",
-    detail: "Of the initiator's department — the first review of every deferral.",
+    detail:
+      "Of the initiator's department — the first review of every deferral.",
   },
   {
     role: "Mitigation Department Heads",
-    detail: "One per mitigation department selected on the deferral, reviewed in parallel.",
+    detail:
+      "One per mitigation department selected on the deferral, reviewed in parallel.",
   },
   {
     role: "Reliability Engineer",
@@ -218,7 +221,8 @@ const approvalSequence = [
   },
   {
     role: "Technical Authority / AD HOC",
-    detail: "Only inserted into the cycle when the Reliability GM enables them.",
+    detail:
+      "Only inserted into the cycle when the Reliability GM enables them.",
   },
   {
     role: "Parallel Sign-off Group",
@@ -257,6 +261,13 @@ const reliabilityGmDecisionSteps = [
   "After the Reliability GM approval is signed, the decision is locked. TA/AD HOC routing cannot be changed from that panel after the GM step is no longer pending.",
 ];
 
+const dashboardSteps = [
+  "Department Deferrals:Department tabs show how many deferrals are in each status.",
+  "Role visibility: Initiators and Department Heads see dashboard counts for their own department. Higher management roles can see all departments.",
+  "First, second, and third deferrals: Counters show whether a deferral is the first, second, or third deferral created for the same work order.",
+  "Active and history records: Active records include Draft, In Approval, Returned, and Approved. History records include Completed, Closed, Rejected, Deleted, and Expired.",
+];
+
 const creationSteps = [
   "Open Deferrals, then choose the new deferral action.",
   "Enter the Work Order number and title. If the same work order already has a deferral, the app warns the initiator so a second deferral is intentional and not a duplicate.",
@@ -270,21 +281,89 @@ const creationSteps = [
 ];
 
 const buttonGuide = [
-  { name: "Apply", where: "Deferrals search", meaning: "Runs the search using the selected filters." },
-  { name: "Reset", where: "Deferrals search", meaning: "Clears filters and returns the search to its default state." },
-  { name: "Refresh results", where: "Deferrals search", meaning: "Reloads the current results without changing filters." },
-  { name: "Export CSV", where: "Deferrals search", meaning: "Exports the deferrals that match the current filters." },
-  { name: "Save", where: "Draft/edit forms", meaning: "Saves changed draft or returned deferral fields." },
-  { name: "Submit", where: "Deferral details", meaning: "Moves a draft or returned deferral into the approval workflow." },
-  { name: "Approve", where: "Approval panel", meaning: "Signs the active approval step and moves the workflow forward." },
-  { name: "Return to Initiator", where: "Approval panel", meaning: "Sends the deferral back for modification. A reason/comment is required." },
-  { name: "Reject Completely", where: "Approval panel", meaning: "Rejects the deferral permanently. The initiator cannot resubmit the same record." },
-  { name: "Save Decision", where: "Reliability GM Decision", meaning: "Saves whether Technical Authority and/or AD HOC signatures should be added to the approval cycle." },
-  { name: "Close deferral", where: "Deferral details/print tab", meaning: "Allows the initiator to close a completed deferral when the job has been executed before the new LAFD." },
-  { name: "Mark as deleted", where: "Deferral details", meaning: "Soft-deletes an in-approval deferral and stores the deletion reason." },
-  { name: "Delete draft", where: "Deferral details", meaning: "Permanently removes the initiator's draft from the database before it enters approval." },
-  { name: "Export PDF", where: "Print tab", meaning: "Downloads the printable deferral PDF, including signatures, risks, approvals, and mitigation approvals." },
-  { name: "Upload & Trim", where: "Profile", meaning: "Uploads a signature image and opens the editor for crop, rotation, brightness, and contrast." },
+  {
+    name: "Apply",
+    where: "Deferrals search",
+    meaning: "Runs the search using the selected filters.",
+  },
+  {
+    name: "Reset",
+    where: "Deferrals search",
+    meaning: "Clears filters and returns the search to its default state.",
+  },
+  {
+    name: "Refresh results",
+    where: "Deferrals search",
+    meaning: "Reloads the current results without changing filters.",
+  },
+  {
+    name: "Export CSV",
+    where: "Deferrals search",
+    meaning: "Exports the deferrals that match the current filters.",
+  },
+  {
+    name: "Save",
+    where: "Draft/edit forms",
+    meaning: "Saves changed draft or returned deferral fields.",
+  },
+  {
+    name: "Submit",
+    where: "Deferral details",
+    meaning: "Moves a draft or returned deferral into the approval workflow.",
+  },
+  {
+    name: "Approve",
+    where: "Approval panel",
+    meaning: "Signs the active approval step and moves the workflow forward.",
+  },
+  {
+    name: "Return to Initiator",
+    where: "Approval panel",
+    meaning:
+      "Sends the deferral back for modification. A reason/comment is required.",
+  },
+  {
+    name: "Reject Completely",
+    where: "Approval panel",
+    meaning:
+      "Rejects the deferral permanently. The initiator cannot resubmit the same record.",
+  },
+  {
+    name: "Save Decision",
+    where: "Reliability GM Decision",
+    meaning:
+      "Saves whether Technical Authority and/or AD HOC signatures should be added to the approval cycle.",
+  },
+  {
+    name: "Close deferral",
+    where: "Deferral details/print tab",
+    meaning:
+      "Allows the initiator to close a completed deferral when the job has been executed before the new LAFD.",
+  },
+  {
+    name: "Mark as deleted",
+    where: "Deferral details",
+    meaning:
+      "Soft-deletes an in-approval deferral and stores the deletion reason.",
+  },
+  {
+    name: "Delete draft",
+    where: "Deferral details",
+    meaning:
+      "Permanently removes the initiator's draft from the database before it enters approval.",
+  },
+  {
+    name: "Export PDF",
+    where: "Print tab",
+    meaning:
+      "Downloads the printable deferral PDF, including signatures, risks, approvals, and mitigation approvals.",
+  },
+  {
+    name: "Upload & Trim",
+    where: "Profile",
+    meaning:
+      "Uploads a signature image and opens the editor for crop, rotation, brightness, and contrast.",
+  },
 ];
 
 const notificationGuide = [
@@ -294,6 +373,200 @@ const notificationGuide = [
   "Expiry notifications remind the initiator to create a 2nd/3rd deferral if the work remains deferred, or to close the deferral if the job has been completed.",
   "Notifications are available from the bell in the header. Users can open the related deferral and mark notifications as read.",
   "When notifications are allowed in the browser, the app also sends a native browser notification for the same events, so approvers see an alert even if the app tab isn't open (as long as the browser itself is running).",
+];
+
+// Real captured screenshots, saved by the team into public/user-guide/.
+// Filenames contain spaces, so every reference goes through this helper to
+// URL-encode them; the files themselves are left exactly as captured.
+const ug = (name: string) => `/user-guide/${encodeURIComponent(name)}`;
+
+const signupSlides: GuideSlide[] = [
+  {
+    src: ug("create an account.png"),
+    alt: "Sign-in form",
+    caption: "Create an account.",
+  },
+  { src: ug("signup.png"), alt: "Sign-up form", caption: "The sign-up form." },
+];
+
+const notificationSlides: GuideSlide[] = [
+  {
+    src: ug("sign-in page.png"),
+    alt: "Sign-in page",
+    caption: "The sign in page",
+  },
+  {
+    src: ug("enable notifications 1.png"),
+    alt: "Browser notification permission prompt",
+    caption: "The browser's native permission prompt.",
+  },
+  {
+    src: ug("enable notifications 2.png"),
+    alt: "Notifications enabled",
+    caption: "Notifications enabled.",
+  },
+];
+
+const signatureSlides: GuideSlide[] = [
+  {
+    src: ug("how to open profile page.png"),
+    alt: "open profile page",
+    caption: "open profile page",
+  },
+  {
+    src: ug("press on upload and trim to upload the signature.png"),
+    alt: "Upload and trim signature button",
+    caption: "Press Upload & Trim to add your signature.",
+  },
+  {
+    src: ug("adjust the electronnic signature.png"),
+    alt: "Signature crop and adjustment editor",
+    caption: "Crop, rotate, and adjust the signature.",
+  },
+];
+
+const createDeferralSlides: GuideSlide[] = [
+  { src: ug("new deferral 1.png"), alt: "New deferral — step 1" },
+  { src: ug("new deferral 2.png"), alt: "New deferral — step 2" },
+  { src: ug("new deferral 4.png"), alt: "New deferral — step 3" },
+  { src: ug("new deferral 5.png"), alt: "New deferral — step 4" },
+  { src: ug("new deferral 6.png"), alt: "New deferral — step 5" },
+  { src: ug("new deferral 7.png"), alt: "New deferral — step 6" },
+  { src: ug("new deferral 8.png"), alt: "New deferral — step 7" },
+  { src: ug("new deferral 9.png"), alt: "New deferral — step 8" },
+  { src: ug("new deferral 3.png"), alt: "New deferral — step 9" },
+  {
+    src: ug("new deferral 10 (Submit).png"),
+    alt: "New deferral — step 10, Submit",
+  },
+  {
+    src: ug("confirm submit .png"),
+    alt: "Confirm submit dialog",
+    caption: "Confirming submission.",
+  },
+];
+
+const deleteDeferralSlides: GuideSlide[] = [
+  {
+    src: ug("delete the draft deferral permanently from database.png"),
+    alt: "Deleting a deferral with a reason",
+    caption: "Deleting a draft, with a reason recorded.",
+  },
+  {
+    src: ug("delete with reason.png"),
+    alt: "Deleting a deferral with a reason after submission",
+    caption: "Deleting an in-approval deferral, with a reason recorded.",
+  },
+];
+
+const dashboardSlides: GuideSlide[] = [
+  {
+    src: ug("dashboard 1.png"),
+    alt: "Department deferrals count",
+    caption:
+      "Department deferrals in case of Initiators and Department Heads accounts.",
+  },
+  {
+    src: ug("dashboard 2.png"),
+    alt: "1st, 2nd, and 3rd deferrals count",
+    caption:
+      "1st, 2nd, and 3rd deferrals count in case of Initiators and Department Heads accounts.",
+  },
+  {
+    src: ug("dashboard 3.png"),
+    alt: "Department deferrals count",
+    caption:
+      "Department deferrals in case of Initiators and Department Heads accounts.",
+  },
+  {
+    src: ug("dashboard 4.png"),
+    alt: "Recently created deferrals",
+    caption:
+      "Recently created deferrals in case of Initiators and Department Heads accounts.",
+  },
+  {
+    src: ug("dashboard 5.png"),
+    alt: "deferrals count",
+    caption: "All deferrals counts in case of Higher Management accounts.",
+  },
+  {
+    src: ug("dashboard 6.png"),
+    alt: "Departments deferrals count",
+    caption:
+      "All Departments deferrals count in case of Higher Management accounts.",
+  },
+];
+
+const reviewerSlides: GuideSlide[] = [
+  {
+    src: ug("dh notified.png"),
+    alt: "Department Head notified of a new deferral",
+    caption: "The reviewer is notified that a deferral needs their action.",
+  },
+  {
+    src: ug("open the deferral to check its details .png"),
+    alt: "Opening a deferral to review its details",
+    caption: "Opening the deferral to review its details.",
+  },
+  {
+    src: ug("approval page.png"),
+    alt: "The approval page",
+    caption: "The approval page.",
+  },
+  {
+    src: ug("approve , return to initiator , reject completely.png"),
+    alt: "Approve, Return to Initiator, and Reject Completely buttons",
+    caption: "Approve, Return to Initiator, or Reject Completely.",
+  },
+];
+
+const mitigationSlides: GuideSlide[] = [
+  {
+    src: ug("DH mitigation approvals .png"),
+    alt: "Department Head mitigation approval step",
+    caption: "A mitigation department head signing their mitigation step.",
+  },
+];
+
+const gmDecisionSlides: GuideSlide[] = [
+  {
+    src: ug("reliability GM decision for TA and AD HOC.png"),
+    alt: "Reliability GM decision panel for Technical Authority and AD HOC",
+    caption: "Reliability GM choosing whether TA and/or AD HOC are required.",
+  },
+];
+
+const historySlides: GuideSlide[] = [
+  {
+    src: ug("approvals history.png"),
+    alt: "Deferral approval history and timeline",
+    caption: "The approval history/timeline on a deferral.",
+  },
+
+  {
+    src: ug("work order history.png"),
+    alt: "work order history and timeline",
+    caption: "the work order history and timeline.",
+  },
+
+  {
+    src: ug("deferral history .png"),
+    alt: "Deferral returns history and timeline",
+    caption: "Deferral returns history and timeline.",
+  },
+];
+
+const exportSlides: GuideSlide[] = [
+  {
+    src: ug("export tab (print).png"),
+    alt: "Export/Print tab for PDF export",
+    caption: "The Print/Export tab.",
+  },
+    {
+    src: ug("exported pdf.png"),
+    alt: "exported pdf",
+    caption: "The exported pdf.",
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -316,7 +589,9 @@ function SectionHeading({
           {eyebrow}
         </p>
       )}
-      <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">{title}</h2>
+      <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">
+        {title}
+      </h2>
       {description && (
         <p className="max-w-2xl text-sm text-muted-foreground">{description}</p>
       )}
@@ -360,7 +635,9 @@ function HelpCard(props: {
     <Card className="gap-4 rounded-lg py-5">
       <CardHeader className="px-5">
         <CardTitle className="text-base">{props.title}</CardTitle>
-        {props.description && <CardDescription>{props.description}</CardDescription>}
+        {props.description && (
+          <CardDescription>{props.description}</CardDescription>
+        )}
       </CardHeader>
       <CardContent className="px-5 text-sm text-muted-foreground">
         {props.children}
@@ -420,8 +697,8 @@ export default function HelpPage() {
           </h1>
           <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
             Everything you need to know: what the app does, how to get set up,
-            how to create and review deferrals, and how the approval cycle
-            works &mdash; with a full breakdown of every role's responsibility.
+            how to create and review deferrals, and how the approval cycle works
+            &mdash; with a full breakdown of every role's responsibility.
           </p>
         </div>
       </div>
@@ -460,8 +737,8 @@ export default function HelpPage() {
                   approving Last Acceptable Failure Date (LAFD) deferrals
                   simple, transparent, and auditable. Engineers submit a
                   deferral request with its supporting risk assessment and
-                  mitigations, then track it as it moves through a
-                  structured, multi-step approval cycle.
+                  mitigations, then track it as it moves through a structured,
+                  multi-step approval cycle.
                 </p>
                 <p>
                   Once submitted, a deferral is stored centrally and
@@ -474,11 +751,10 @@ export default function HelpPage() {
                   exported as a PDF for audit and reporting.
                 </p>
                 <p>
-                  The app also sends notifications &mdash; inside the app,
-                  and as native browser notifications once enabled &mdash; so
-                  approvers know immediately when a deferral needs their
-                  action, and initiators are reminded before a new LAFD date
-                  arrives.
+                  The app also sends notifications &mdash; inside the app, and
+                  as native browser notifications once enabled &mdash; so
+                  approvers know immediately when a deferral needs their action,
+                  and initiators are reminded before a new LAFD date arrives.
                 </p>
               </CardContent>
             </Card>
@@ -505,21 +781,24 @@ export default function HelpPage() {
             title="Create An Account & Sign In"
             description="How to get into the app for the first time, and every time after."
           >
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid gap-6 lg:grid-cols-1">
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold text-foreground">
                   Create an account
                 </h3>
-                <StepList steps={accountCreationSteps} />
-                <GuideImage
-                  src="/user-guide/create-account.png"
-                  alt="Sign-up form showing name, email, password, and department fields"
-                  caption="The sign-up form."
-                />
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <StepList steps={accountCreationSteps} />
+                  <GuideCarousel slides={signupSlides} />
+                </div>
               </div>
               <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-foreground">Sign in</h3>
-                <StepList steps={signInSteps} />
+                <h3 className="text-sm font-semibold text-foreground">
+                  Sign in
+                </h3>
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <StepList steps={signInSteps} />
+                  <GuideCarousel slides={notificationSlides} />
+                </div>
               </div>
             </div>
           </Section>
@@ -533,11 +812,7 @@ export default function HelpPage() {
           >
             <div className="grid gap-6 lg:grid-cols-2">
               <StepList steps={signatureSteps} />
-              <GuideImage
-                src="/user-guide/add-signature.png"
-                alt="Profile page signature upload and trim editor"
-                caption="Uploading and trimming a signature from Profile."
-              />
+              <GuideCarousel slides={signatureSlides} />
             </div>
           </Section>
 
@@ -587,32 +862,9 @@ export default function HelpPage() {
             title="Main Screens"
             description="A quick tour of the main screen before diving into each feature."
           >
-            <GuideImage
-              src="/user-guide/main-screen-overview.png"
-              alt="Annotated main screen showing deferrals list, search, filters, and notifications"
-              caption="The main deferrals screen, with its key controls labeled."
-              aspect="16 / 8"
-            />
-            <div className="grid gap-3 md:grid-cols-2">
-              <HelpCard title="Department breakdown">
-                Department tabs show how many deferrals are in each status.
-                The app normalizes department names so capitalization
-                differences do not create duplicate departments.
-              </HelpCard>
-              <HelpCard title="Role visibility">
-                Initiators and Department Heads see dashboard counts for
-                their own department. Higher management roles can see all
-                departments.
-              </HelpCard>
-              <HelpCard title="First, second, and third deferrals">
-                Counters show whether a deferral is the first, second, or
-                third deferral created for the same work order.
-              </HelpCard>
-              <HelpCard title="Active and history records">
-                Active records include Draft, In Approval, Returned, and
-                Approved. History records include Completed, Closed,
-                Rejected, Deleted, and Expired.
-              </HelpCard>
+            <div className="grid gap-6 lg:grid-cols-2">
+              <StepList steps={dashboardSteps} />
+              <GuideCarousel slides={dashboardSlides} />
             </div>
           </Section>
 
@@ -623,32 +875,31 @@ export default function HelpPage() {
             title="Create A Deferral"
             description="The initiator creates the record, completes all required sections, and submits it into approval."
           >
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
               <StepList steps={creationSteps} />
-              <GuideImage
-                src="/user-guide/create-deferral.png"
-                alt="New deferral form with work order, equipment, LAFD dates, and risk fields"
-                caption="The new deferral form."
-              />
+              <GuideCarousel slides={createDeferralSlides} />
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
               <HelpCard title="Duplicate work order warning">
                 If a work order already has a deferral, the app displays a
-                warning before continuing so the initiator confirms this is
-                an intended second or third deferral, not a duplicate.
+                warning before continuing so the initiator confirms this is an
+                intended second or third deferral, not a duplicate.
               </HelpCard>
-              <HelpCard title="Automatic draft saves">
-                Draft and returned deferral changes are saved when moving
-                between tabs, pressing Save, or opening details. This avoids
-                losing mitigation and risk changes while editing.
+              <GuideImage
+                src={ug("warning before creating second or third deferral.png")}
+                alt="Duplicate work order warning"
+              />
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+              <HelpCard title="Deleting a deferral">
+                A draft can be permanently deleted by its initiator before
+                submission. An in-approval deferral can instead be marked as
+                deleted with a reason, which keeps the record for audit purposes
+                while removing it from active lists.
               </HelpCard>
-              <HelpCard title="Mitigations">
-                The initiator can add multiple mitigations before
-                submission. Each mitigation has a required department. The
-                Department Head for that department is added to the
-                approval workflow.
-              </HelpCard>
+              <GuideCarousel slides={deleteDeferralSlides} />
             </div>
           </Section>
 
@@ -659,24 +910,27 @@ export default function HelpPage() {
             title="Search, Filters, And Export"
             description="The Deferrals page is used to find records and export filtered data."
           >
+            <GuideImage
+              src={ug("deferrals search.png")}
+              alt="Deferrals Search, Filters, And Export"
+            />
             <div className="grid gap-3 md:grid-cols-2">
               <HelpCard title="Available filters">
-                Filter by department, status, deferral code, work order
-                number, equipment tag, updated date range, and whether the
-                record is the 1st, 2nd, or 3rd deferral for its work order.
+                Filter by department, status, deferral code, work order number,
+                equipment tag, updated date range, and whether the record is the
+                1st, 2nd, or 3rd deferral for its work order.
               </HelpCard>
               <HelpCard title="Role-based filtering">
-                Initiators are limited to their own department when
-                searching.
+                Initiators are limited to their own department when searching.
               </HelpCard>
               <HelpCard title="Results">
-                Results are ordered by Updated At, newest first. The page
-                loads the first group of records, then more records as the
-                user scrolls.
+                Results are ordered by Updated At, newest first. The page loads
+                the first group of records, then more records as the user
+                scrolls.
               </HelpCard>
               <HelpCard title="CSV export">
-                Export CSV downloads the deferrals matching the current
-                filters, so users should apply filters before exporting.
+                Export CSV downloads the deferrals matching the current filters,
+                so users should apply filters before exporting.
               </HelpCard>
             </div>
           </Section>
@@ -707,21 +961,26 @@ export default function HelpPage() {
                 ))}
               </div>
             </Card>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <HelpCard title="Approve">
-                The active approver signs the current step. The signature
-                snapshot is stored with the approval so PDFs keep the signed
-                evidence.
-              </HelpCard>
-              <HelpCard title="Return to initiator">
-                Sends the deferral back for correction. A reason is
-                required. The initiator can edit and resubmit.
-              </HelpCard>
-              <HelpCard title="Reject completely">
-                Ends the workflow as Rejected. A reason is required, and the
-                initiator cannot resubmit that same record.
-              </HelpCard>
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+              <div className="space-y-4">
+                <HelpCard title="Approval history">
+                  Every deferral keeps a full timeline of who approved,
+                  returned, or rejected each step, with their comment and
+                  signature, so the whole approval history stays auditable.
+                </HelpCard>
+                <HelpCard title="Work order history">
+                  Shows every deferral ever raised against the same work
+                  order &mdash; 1st, 2nd, 3rd, and so on &mdash; so reviewers
+                  can see the full deferral history for that equipment or
+                  work order at a glance.
+                </HelpCard>
+                <HelpCard title="Deferral history">
+                  Shows the deferral's own return and resubmission timeline
+                  &mdash; when it was returned to the initiator, what was
+                  changed, and when it was resubmitted.
+                </HelpCard>
+              </div>
+              <GuideCarousel slides={historySlides} />
             </div>
           </Section>
 
@@ -732,31 +991,36 @@ export default function HelpPage() {
             title="How Reviewers Approve, Return, Or Reject A Deferral"
             description="A reviewer is any approval user who has an active approval step, such as Department Head, Reliability Engineer, Reliability GM, Technical Authority, AD HOC, Responsible GM, SOD, DFGM, or Planning."
           >
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
               <StepList steps={reviewerSteps} />
-              <GuideImage
-                src="/user-guide/approve-return-reject.png"
-                alt="Approval panel with comment box and Approve, Return to Initiator, and Reject Completely buttons"
-                caption="The approval action panel."
-              />
+              <GuideCarousel slides={reviewerSlides} />
             </div>
 
             <div className="grid gap-3 md:grid-cols-3">
-              <HelpCard title="Before approving">
+              <HelpCard title="Approve">
                 Confirm that the work order, equipment, original/current/new
-                LAFD, risk assessment, justification, consequence,
-                mitigations, and attachments support the deferral request.
+                LAFD, risk assessment, justification, consequence, mitigations,
+                and attachments support the deferral request.
               </HelpCard>
-              <HelpCard title="Returning">
-                Use Return to Initiator when information is missing,
-                incorrect, or needs clarification. The return reason is
-                saved and shown to the initiator.
+              <HelpCard title="Return to initiator">
+                Use Return to Initiator when information is missing, incorrect,
+                or needs clarification. The return reason is saved and shown to
+                the initiator.
               </HelpCard>
-              <HelpCard title="Rejecting">
+              <HelpCard title="Reject completely">
                 Use Reject Completely only when the deferral should not
-                continue. This is final for the current record and requires
-                a reason.
+                continue. This is final for the current record and requires a
+                reason.
               </HelpCard>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+              <HelpCard title="Mitigation approvals">
+                When a deferral has mitigations, each mitigation's department
+                head reviews and signs their own mitigation step &mdash;
+                separate from.
+              </HelpCard>
+              <GuideCarousel slides={mitigationSlides} />
             </div>
           </Section>
 
@@ -767,30 +1031,21 @@ export default function HelpPage() {
             title="Reliability GM: Add Technical Authority Or AD HOC"
             description="Reliability GM can add optional Technical Authority and AD HOC approval steps before signing the Reliability GM approval."
           >
-            <StepList steps={reliabilityGmDecisionSteps} />
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <StepList steps={reliabilityGmDecisionSteps} />
+              <GuideCarousel slides={gmDecisionSlides} />
+            </div>
 
             <div className="grid gap-3 md:grid-cols-2">
-              <HelpCard title="Requires Technical Authority">
-                Turn this on when the deferral needs a Technical Authority
-                review. The workflow inserts a Technical Authority
-                Signature step after Reliability GM and before the parallel
-                sign-off group.
-              </HelpCard>
-              <HelpCard title="Requires AD HOC">
-                Turn this on when the deferral needs an AD HOC review. The
-                workflow inserts an AD HOC Signature step after Reliability
-                GM and before the parallel sign-off group.
-              </HelpCard>
               <HelpCard title="When it is editable">
-                The decision is editable only when the Reliability GM
-                approval is active and pending. If the panel shows Locked,
-                the GM step is either not active yet or has already been
-                signed.
+                The decision is editable only when the Reliability GM approval
+                is active and pending. If the panel shows Locked, the GM step is
+                either not active yet or has already been signed.
               </HelpCard>
               <HelpCard title="Correct order">
-                Reliability GM should set TA/AD HOC requirements, press
-                Save Decision, confirm the approval timeline, then approve
-                the Reliability GM step.
+                Reliability GM should set TA/AD HOC requirements, press Save
+                Decision, confirm the approval timeline, then approve the
+                Reliability GM step.
               </HelpCard>
             </div>
           </Section>
@@ -808,7 +1063,10 @@ export default function HelpPage() {
                   <CardContent className="grid gap-3 px-5 md:grid-cols-[180px_minmax(0,1fr)]">
                     <div>
                       <Badge
-                        className={cn("border-transparent", STATUS_COLORS[item.status])}
+                        className={cn(
+                          "border-transparent",
+                          STATUS_COLORS[item.status],
+                        )}
                       >
                         {STATUS_LABELS[item.status]}
                       </Badge>
@@ -834,9 +1092,10 @@ export default function HelpPage() {
             title="Dashboard & Statistics"
             description="A visual overview of deferrals across the company, by department, status, and deferral rank."
           >
+     
             <GuideImage
-              src="/user-guide/dashboard-statistics.png"
-              alt="Dashboard showing department and status breakdowns"
+              src={ug("dashboard-statistics.png")}
+              alt="Deferrals Search, Filters, And Export"
               caption="The dashboard's department and status breakdown."
               aspect="16 / 8"
             />
@@ -849,6 +1108,13 @@ export default function HelpPage() {
             title="Notifications"
             description="Notifications tell users when a deferral needs attention."
           >
+            
+            <GuideImage
+              src={ug("notifications list.png")}
+              alt="Notifications"
+              aspect="16 / 8"
+            />
+     
             <Card className="rounded-lg py-5">
               <CardContent className="px-5">
                 <BulletList items={notificationGuide} />
@@ -865,25 +1131,26 @@ export default function HelpPage() {
           >
             <div className="grid gap-3 md:grid-cols-2">
               <HelpCard title="Profile signature">
-                Users upload their signature from Profile. The editor
-                supports crop, rotation, brightness, contrast, reset, and
-                live preview.
+                Users upload their signature from Profile. The editor supports
+                crop, rotation, brightness, contrast, reset, and live preview.
               </HelpCard>
               <HelpCard title="Approval signatures">
-                When a user approves, returns, or rejects, the app stores
-                the user's name and signature snapshot with that action.
+                When a user approves, returns, or rejects, the app stores the
+                user's name and signature snapshot with that action.
               </HelpCard>
               <HelpCard title="Mitigation approval table">
                 Mitigation approvals have their own PDF table. The table
-                includes department, mitigation, signature, approved by,
-                date, and comment.
+                includes department, mitigation, signature, approved by, date,
+                and comment.
               </HelpCard>
               <HelpCard title="PDF export">
-                The Print tab exports the PDF containing deferral
-                information, risks, mitigations, approval timeline,
-                signatures, and mitigation approvals.
+                The Print tab exports the PDF containing deferral information,
+                risks, mitigations, approval timeline, signatures, and
+                mitigation approvals.
               </HelpCard>
             </div>
+
+            <GuideCarousel slides={exportSlides} aspect="16 / 9" />
           </Section>
 
           <Section
@@ -895,11 +1162,18 @@ export default function HelpPage() {
           >
             <div className="grid gap-3">
               {buttonGuide.map((button) => (
-                <Card key={`${button.where}-${button.name}`} className="rounded-lg py-4">
+                <Card
+                  key={`${button.where}-${button.name}`}
+                  className="rounded-lg py-4"
+                >
                   <CardContent className="grid gap-3 px-5 text-sm md:grid-cols-[180px_220px_minmax(0,1fr)]">
-                    <div className="font-medium text-foreground">{button.name}</div>
+                    <div className="font-medium text-foreground">
+                      {button.name}
+                    </div>
                     <div className="text-muted-foreground">{button.where}</div>
-                    <div className="text-muted-foreground">{button.meaning}</div>
+                    <div className="text-muted-foreground">
+                      {button.meaning}
+                    </div>
                   </CardContent>
                 </Card>
               ))}

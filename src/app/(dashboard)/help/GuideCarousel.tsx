@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronLeft, ChevronRight, ImageIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, ImageIcon, ZoomIn } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ImageLightbox } from "./ImageLightbox";
 
 export type GuideSlide = {
   src: string;
@@ -15,6 +16,9 @@ export type GuideSlide = {
  * screenshots (e.g. the steps of creating a deferral). Falls back to a
  * "not added yet" placeholder per-slide if a given file is missing, the
  * same way GuideImage does for a single screenshot.
+ *
+ * Clicking the current slide opens it in a full-screen lightbox, with the
+ * same prev/next navigation available there.
  */
 export function GuideCarousel({
   slides,
@@ -25,10 +29,26 @@ export function GuideCarousel({
 }) {
   const [index, setIndex] = useState(0);
   const [failed, setFailed] = useState<Record<number, boolean>>({});
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  const current = slides[index];
+
+  // Same race condition GuideImage guards against: the browser can start
+  // (and fail) loading the <img> before React hydrates and attaches
+  // onError, so the native broken-image icon shows instead of our
+  // placeholder. Re-check once mounted, and again whenever the slide
+  // (and therefore the src) changes.
+  useEffect(() => {
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalWidth === 0) {
+      setFailed((prev) => ({ ...prev, [index]: true }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, current?.src]);
 
   if (slides.length === 0) return null;
 
-  const current = slides[index];
   const fileName = current.src.split("/").pop();
   const go = (dir: 1 | -1) =>
     setIndex((i) => (i + dir + slides.length) % slides.length);
@@ -57,15 +77,24 @@ export function GuideCarousel({
             </div>
           </div>
         ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={current.src}
-            alt={current.alt}
-            className="h-full w-full object-contain bg-white"
-            onError={() =>
-              setFailed((prev) => ({ ...prev, [index]: true }))
-            }
-          />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              ref={imgRef}
+              src={current.src}
+              alt={current.alt}
+              onClick={() => setLightboxOpen(true)}
+              className="h-full w-full cursor-zoom-in object-contain bg-white"
+              onError={() =>
+                setFailed((prev) => ({ ...prev, [index]: true }))
+              }
+            />
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/10 group-hover:opacity-100">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-background/90 text-foreground shadow">
+                <ZoomIn className="h-4 w-4" />
+              </span>
+            </div>
+          </>
         )}
 
         {slides.length > 1 && (
@@ -108,6 +137,18 @@ export function GuideCarousel({
       </div>
       {current.caption && (
         <p className="text-xs text-muted-foreground">{current.caption}</p>
+      )}
+
+      {lightboxOpen && !failed[index] && (
+        <ImageLightbox
+          src={current.src}
+          alt={current.alt}
+          caption={current.caption}
+          counter={slides.length > 1 ? `${index + 1} / ${slides.length}` : undefined}
+          onClose={() => setLightboxOpen(false)}
+          onPrev={slides.length > 1 ? () => go(-1) : undefined}
+          onNext={slides.length > 1 ? () => go(1) : undefined}
+        />
       )}
     </div>
   );

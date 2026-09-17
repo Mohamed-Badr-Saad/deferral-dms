@@ -50,6 +50,7 @@ export async function POST(req: Request) {
 
     const userId = result?.user?.id;
     if (!userId) {
+      console.error("[signup] signUpEmail returned no user id:", result);
       return NextResponse.json(
         { message: "Server error" },
         { status: 500 }
@@ -68,6 +69,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (err: any) {
+    console.error("[signup] error:", err);
     if (err?.code === "23505") {
       return NextResponse.json(
         { message: "Email already exists" },
